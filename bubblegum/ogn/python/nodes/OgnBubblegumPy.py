@@ -1,4 +1,5 @@
 import omni.graph.core as og
+import omni.timeline
 import omni.usd
 from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
@@ -31,6 +32,14 @@ class OgnBubblegumPy:
             db.log_error("No USD stage is available.")
             return False
 
+        timeline = omni.timeline.get_timeline_interface()
+        is_playing = timeline.is_playing() if timeline is not None else True
+        if not is_playing:
+            OgnBubblegumPy._clear_attachment_state(stage, state)
+            db.outputs.isAttached = False
+            db.outputs.attachedPrimPath = ""
+            return True
+
         helper_paths = OgnBubblegumPy._extract_target_paths(db.inputs.helperPrim)
         helper_path = helper_paths[0] if helper_paths else ""
         if not helper_path:
@@ -43,12 +52,7 @@ class OgnBubblegumPy:
             return False
 
         if not db.inputs.stick and state.attached_prim_path:
-            released_prim = stage.GetPrimAtPath(state.attached_prim_path)
-            if released_prim.IsValid():
-                OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
-            state.attached_prim_path = ""
-            state.attached_to_helper = Gf.Matrix4d(1.0)
-            state.restore_kinematic_enabled = None
+            OgnBubblegumPy._clear_attachment_state(stage, state)
             db.outputs.didRelease = True
 
         if state.attached_prim_path:
@@ -108,6 +112,17 @@ class OgnBubblegumPy:
         if not value or value in {"[]", "None"}:
             return []
         return [value]
+
+    @staticmethod
+    def _clear_attachment_state(stage, state):
+        if state.attached_prim_path:
+            released_prim = stage.GetPrimAtPath(state.attached_prim_path)
+            if released_prim.IsValid():
+                OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
+
+        state.attached_prim_path = ""
+        state.attached_to_helper = Gf.Matrix4d(1.0)
+        state.restore_kinematic_enabled = None
 
     @staticmethod
     def _find_candidate_prim(db, stage, helper_prim, candidate_paths):
