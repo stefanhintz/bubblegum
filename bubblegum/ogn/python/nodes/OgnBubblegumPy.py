@@ -8,6 +8,7 @@ class OgnBubblegumPy:
         def __init__(self):
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
+            self.restore_rigid_body_enabled = None
 
     @staticmethod
     def internal_state():
@@ -44,9 +45,10 @@ class OgnBubblegumPy:
         if not db.inputs.stick and state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
-                OgnBubblegumPy._wake_rigid_body(released_prim)
+                OgnBubblegumPy._restore_rigid_body(released_prim, state.restore_rigid_body_enabled)
             state.attached_prim_path = ""
             state.attached_to_helper = Gf.Matrix4d(1.0)
+            state.restore_rigid_body_enabled = None
             db.outputs.didRelease = True
 
         if state.attached_prim_path:
@@ -65,6 +67,7 @@ class OgnBubblegumPy:
             if candidate_prim is not None:
                 state.attached_prim_path = candidate_prim.GetPath().pathString
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
+                state.restore_rigid_body_enabled = OgnBubblegumPy._disable_rigid_body(candidate_prim)
                 db.outputs.didAttach = True
 
         db.outputs.isAttached = bool(state.attached_prim_path)
@@ -188,6 +191,31 @@ class OgnBubblegumPy:
         return attached_world * helper_world.GetInverse()
 
     @staticmethod
+    def _disable_rigid_body(prim):
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return None
+
+        rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+        rigid_body_enabled_attr = rigid_body_api.GetRigidBodyEnabledAttr()
+        was_enabled = rigid_body_enabled_attr.Get()
+        if was_enabled is None:
+            was_enabled = True
+        rigid_body_enabled_attr.Set(False)
+        return was_enabled
+
+    @staticmethod
+    def _restore_rigid_body(prim, enabled):
+        if enabled is None or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return
+
+        rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+        rigid_body_enabled_attr = rigid_body_api.GetRigidBodyEnabledAttr()
+        rigid_body_enabled_attr.Set(enabled)
+
+        if enabled:
+            OgnBubblegumPy._wake_rigid_body(prim)
+
+    @staticmethod
     def _wake_rigid_body(prim):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             return
@@ -195,12 +223,11 @@ class OgnBubblegumPy:
         try:
             import omni.physics.tensors as physics_tensors
 
-            simulation_view = physics_tensors.create_simulation_view("warp")
+            simulation_view = physics_tensors.create_simulation_view("numpy")
             rigid_body_view = simulation_view.create_rigid_body_view(prim.GetPath().pathString)
             if rigid_body_view.count > 0:
                 rigid_body_view.wake_up()
         except Exception:
-            # If the runtime physics wake-up path is unavailable, just fall back to leaving the prim transform as-is.
             pass
 
     @staticmethod
