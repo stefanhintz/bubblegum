@@ -51,5 +51,5 @@ Outputs:
 
 ## Development Notes
 
-- For this extension, keep OmniGraph node source files under `python/bubblegum/ogn/python/nodes/`.
+- For this extension, keep OmniGraph node source files under `python/bubblegum/nodes/`.
 - If you change `.ogn` files, disable and re-enable the extension or restart Isaac Sim.
