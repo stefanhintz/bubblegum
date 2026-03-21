@@ -5,7 +5,7 @@
         "icon": "icons/icon.svg",
         "uiName": "Bubblegum Sticky Pick",
         "description": [
-            "Attach the first overlapping prim to a helper volume and keep it snapped to the helper until released.",
+            "Attach the first overlapping prim to a helper volume while stick is enabled and keep its contact offset relative to the helper.",
             "This first-pass version is intentionally simple: no padding, no filters beyond optional candidates, and fail-fast on bad prim paths."
         ],
         "categoryDefinitions": "config/CategoryDefinition.json",
@@ -33,13 +33,7 @@
             "stick": {
                 "type": "bool",
                 "uiName": "Stick",
-                "description": "When true and nothing is attached, attach the first overlapping prim.",
-                "default": false
-            },
-            "release": {
-                "type": "bool",
-                "uiName": "Release",
-                "description": "When true, release the currently attached prim.",
+                "description": "Hold true to attach and keep holding the first overlapping prim. Set false to release it.",
                 "default": false
             },
             "candidatePrimPaths": {
@@ -75,7 +69,7 @@
             "didRelease": {
                 "type": "bool",
                 "uiName": "Did Release",
-                "description": "True only on the frame where a release happened.",
+                "description": "True only on the frame where stick was disabled and the current attachment was released.",
                 "default": false
             }
         }

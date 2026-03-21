@@ -7,6 +7,7 @@ class OgnBubblegumPy:
     class _State:
         def __init__(self):
             self.attached_prim_path = ""
+            self.attached_to_helper = Gf.Matrix4d(1.0)
 
     @staticmethod
     def internal_state():
@@ -39,8 +40,9 @@ class OgnBubblegumPy:
             db.log_error(f"Helper prim does not exist: {helper_path}")
             return False
 
-        if db.inputs.release and state.attached_prim_path:
+        if not db.inputs.stick and state.attached_prim_path:
             state.attached_prim_path = ""
+            state.attached_to_helper = Gf.Matrix4d(1.0)
             db.outputs.didRelease = True
 
         if state.attached_prim_path:
@@ -48,7 +50,7 @@ class OgnBubblegumPy:
             if not attached_prim.IsValid():
                 db.log_error(f"Attached prim no longer exists: {state.attached_prim_path}")
                 return False
-            OgnBubblegumPy._snap_attached_prim(helper_prim, attached_prim)
+            OgnBubblegumPy._snap_attached_prim(helper_prim, attached_prim, state.attached_to_helper)
         elif db.inputs.stick:
             candidate_prim = OgnBubblegumPy._find_candidate_prim(
                 db=db,
@@ -58,7 +60,7 @@ class OgnBubblegumPy:
             )
             if candidate_prim is not None:
                 state.attached_prim_path = candidate_prim.GetPath().pathString
-                OgnBubblegumPy._snap_attached_prim(helper_prim, candidate_prim)
+                state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 db.outputs.didAttach = True
 
         db.outputs.isAttached = bool(state.attached_prim_path)
@@ -156,8 +158,15 @@ class OgnBubblegumPy:
         )
 
     @staticmethod
-    def _snap_attached_prim(helper_prim, attached_prim):
+    def _compute_attach_offset(helper_prim, attached_prim):
         helper_world = omni.usd.get_world_transform_matrix(helper_prim)
+        attached_world = omni.usd.get_world_transform_matrix(attached_prim)
+        return attached_world * helper_world.GetInverse()
+
+    @staticmethod
+    def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper):
+        helper_world = omni.usd.get_world_transform_matrix(helper_prim)
+        target_world = attached_to_helper * helper_world
 
         xform_cache = UsdGeom.XformCache(Usd.TimeCode.Default())
         current_local = xform_cache.GetLocalTransformation(attached_prim)
@@ -165,7 +174,7 @@ class OgnBubblegumPy:
             current_local = current_local[0]
         current_scale = OgnBubblegumPy._extract_scale(current_local)
         parent_world = xform_cache.GetParentToWorldTransform(attached_prim)
-        target_local = helper_world * parent_world.GetInverse()
+        target_local = target_world * parent_world.GetInverse()
 
         target_matrix = OgnBubblegumPy._compose_matrix(
             translation=target_local.ExtractTranslation(),
