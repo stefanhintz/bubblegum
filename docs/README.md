@@ -6,7 +6,7 @@ This extension adds one OmniGraph node for Isaac Sim:
 
 The node implements a simple sticky-gripper behavior:
 
-- set `helperPrimPath` to a helper prim that defines the sticky volume
+- set `helperPrim` to a helper prim that defines the sticky volume
 - set `stick = true` to attach and keep holding the first overlapping prim
 - keep evaluating the node to make the attached prim follow the helper
 - set `stick = false` to release it
@@ -16,7 +16,7 @@ Inputs:
 
 - `execIn`
 - `enabled`
-- `helperPrimPath`
+- `helperPrim`
 - `stick`
 - `candidatePrimPaths`
 

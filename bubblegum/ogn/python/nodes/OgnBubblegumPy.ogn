@@ -24,11 +24,10 @@
                 "description": "When false, the node forwards execution but does not change attachment state.",
                 "default": true
             },
-            "helperPrimPath": {
-                "type": "path",
-                "uiName": "Helper Prim Path",
-                "description": "Prim path whose world-space bounds define the sticky volume.",
-                "default": ""
+            "helperPrim": {
+                "type": "target",
+                "uiName": "Helper Prim",
+                "description": "Prim whose world-space bounds define the sticky volume."
             },
             "stick": {
                 "type": "bool",

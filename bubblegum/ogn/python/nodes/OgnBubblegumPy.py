@@ -30,9 +30,10 @@ class OgnBubblegumPy:
             db.log_error("No USD stage is available.")
             return False
 
-        helper_path = str(db.inputs.helperPrimPath).strip()
+        helper_paths = OgnBubblegumPy._extract_target_paths(db.inputs.helperPrim)
+        helper_path = helper_paths[0] if helper_paths else ""
         if not helper_path:
-            db.log_error("inputs:helperPrimPath is required.")
+            db.log_error("inputs:helperPrim is required.")
             return False
 
         helper_prim = stage.GetPrimAtPath(helper_path)
@@ -80,6 +81,26 @@ class OgnBubblegumPy:
             if value:
                 normalized.append(value)
         return normalized
+
+    @staticmethod
+    def _extract_target_paths(target_value):
+        if target_value is None:
+            return []
+
+        paths = getattr(target_value, "paths", None)
+        if paths is not None:
+            try:
+                return [str(path).strip() for path in paths if str(path).strip()]
+            except TypeError:
+                pass
+
+        if isinstance(target_value, (list, tuple)):
+            return [str(path).strip() for path in target_value if str(path).strip()]
+
+        value = str(target_value).strip()
+        if not value or value in {"[]", "None"}:
+            return []
+        return [value]
 
     @staticmethod
     def _find_candidate_prim(db, stage, helper_prim, candidate_paths):
