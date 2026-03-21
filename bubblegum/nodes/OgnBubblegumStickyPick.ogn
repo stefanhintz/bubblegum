@@ -1,12 +1,12 @@
 {
-    "bubblegum.BubblegumStickyPick": {
+    "BubblegumStickyPick": {
         "version": 1,
         "categories": "isaacSim",
         "description": [
             "Minimal sticky pick node for Isaac Sim.",
             "Attach the first overlapping prim to a helper volume and keep it aligned until release."
         ],
-        "language": "Python",
+        "language": "python",
         "metadata": {
             "uiName": "Bubblegum Sticky Pick"
         },
