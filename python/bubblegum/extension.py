@@ -27,6 +27,7 @@ class BubblegumExtension(omni.ext.IExt):
         carb.log_warn(f"[bubblegum] sys.path[0:5]={sys.path[:5]}")
 
         candidate_dirs = [
+            os.path.join(python_dir, "ogn", "python", "nodes"),
             os.path.join(module_dir, "ogn", "python", "nodes"),
             os.path.join(module_dir, "nodes"),
             os.path.join(python_dir, "nodes"),
