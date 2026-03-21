@@ -1,1 +1,1 @@
-from .extension import BubblegumExtension
+from ._impl.extension import BubblegumExtension

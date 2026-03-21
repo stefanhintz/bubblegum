@@ -48,3 +48,8 @@ Outputs:
 - The attached object is moved by authoring a single matrix xform op every tick.
 - The node preserves the attached prim's scale, but not its original xform op stack.
 - There is no physics joint, force limit, filtering, debounce, or safety padding yet.
+
+## Development Notes
+
+- For a no-build OmniGraph Python extension, the node source files live in `bubblegum/nodes/`.
+- If you change `.ogn` files, disable and re-enable the extension or restart Isaac Sim.

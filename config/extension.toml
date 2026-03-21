@@ -12,9 +12,15 @@ keywords = ["Isaac Sim", "OmniGraph", "sticky", "pick", "gripper"]
 readme = "docs/README.md"
 
 [dependencies]
+"omni.graph" = {}
 "omni.graph.core" = {}
+"omni.graph.tools" = {}
 "omni.graph.action" = {}
 "omni.usd" = {}
 
 [[python.module]]
 name = "bubblegum"
+
+[fswatcher.patterns]
+include = ["*.ogn", "*.py"]
+exclude = ["Ogn*Database.py"]
