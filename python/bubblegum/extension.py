@@ -4,12 +4,14 @@ import sys
 
 import carb
 import omni.ext
+import omni.graph.core as og
 
 
 class BubblegumExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
         self._ext_id = ext_id
         self._log_startup_diagnostics()
+        self._register_python_nodes()
 
     def on_shutdown(self):
         self._ext_id = None
@@ -41,3 +43,17 @@ class BubblegumExtension(omni.ext.IExt):
             carb.log_warn(
                 f"[bubblegum] probe path={path} exists={exists} ogn_files={ogn_files} node_py_files={py_files}"
             )
+
+    def _register_python_nodes(self):
+        before = sorted(name for name in og.get_registered_nodes() if "bubblegum" in name.lower())
+        carb.log_warn(f"[bubblegum] registered_before={before}")
+
+        try:
+            og.register_python_node()
+            carb.log_warn("[bubblegum] register_python_node() called")
+        except Exception as exc:
+            carb.log_error(f"[bubblegum] register_python_node() failed: {exc!r}")
+            return
+
+        after = sorted(name for name in og.get_registered_nodes() if "bubblegum" in name.lower())
+        carb.log_warn(f"[bubblegum] registered_after={after}")
