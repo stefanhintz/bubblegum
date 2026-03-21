@@ -65,6 +65,7 @@ class OgnBubblegumPy:
                 candidate_paths=OgnBubblegumPy._normalize_candidate_paths(db.inputs.candidatePrimPaths),
             )
             if candidate_prim is not None:
+                OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.attached_prim_path = candidate_prim.GetPath().pathString
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
@@ -252,6 +253,20 @@ class OgnBubblegumPy:
             pass
 
     @staticmethod
+    def _prepare_transform_control(prim):
+        xformable = UsdGeom.Xformable(prim)
+        if not xformable:
+            return
+
+        xform_cache = UsdGeom.XformCache(Usd.TimeCode.Default())
+        current_local = xform_cache.GetLocalTransformation(prim)
+        if isinstance(current_local, tuple):
+            current_local = current_local[0]
+
+        transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, current_local)
+        transform_op.Set(current_local)
+
+    @staticmethod
     def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper):
         helper_world = omni.usd.get_world_transform_matrix(helper_prim)
         target_world = attached_to_helper * helper_world
@@ -271,18 +286,40 @@ class OgnBubblegumPy:
         )
 
         xformable = UsdGeom.Xformable(attached_prim)
-        transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable)
+        transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, current_local)
         transform_op.Set(target_matrix)
 
     @staticmethod
-    def _get_or_create_transform_op(xformable):
-        for op in xformable.GetOrderedXformOps():
+    def _get_or_create_transform_op(xformable, current_local):
+        ordered_ops = list(xformable.GetOrderedXformOps())
+        for op in ordered_ops:
             if op.GetOpType() == UsdGeom.XformOp.TypeTransform and not op.IsInverseOp():
+                OgnBubblegumPy._remove_extra_xform_ops(xformable, keep_op=op)
                 xformable.SetXformOpOrder([op], resetXformStack=False)
+                op.Set(current_local)
                 return op
 
         xformable.ClearXformOpOrder()
-        return xformable.AddTransformOp(precision=UsdGeom.XformOp.PrecisionDouble)
+        transform_op = xformable.AddTransformOp(precision=UsdGeom.XformOp.PrecisionDouble)
+        transform_op.Set(current_local)
+        OgnBubblegumPy._remove_extra_xform_ops(xformable, keep_op=transform_op)
+        return transform_op
+
+    @staticmethod
+    def _remove_extra_xform_ops(xformable, keep_op):
+        keep_name = str(keep_op.GetName())
+        for op in list(xformable.GetOrderedXformOps()):
+            op_name = str(op.GetName())
+            if op_name != keep_name:
+                xformable.GetPrim().RemoveProperty(op_name)
+
+        # Also remove authored xform ops that may no longer be ordered, so downstream tools
+        # do not try to keep driving stale orient/rotate/scale properties.
+        prim = xformable.GetPrim()
+        for prop in list(prim.GetProperties()):
+            prop_name = prop.GetName()
+            if prop_name.startswith("xformOp:") and prop_name != keep_name:
+                prim.RemoveProperty(prop_name)
 
     @staticmethod
     def _extract_scale(matrix):
