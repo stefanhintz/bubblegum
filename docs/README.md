@@ -34,7 +34,7 @@ Outputs:
 ## Usage
 
 1. Add `/Users/stefanhintz/bubblegum` as an extension search path in Isaac Sim.
-2. Enable `bubblegum.isaac.sticky_node` in the Extension Manager.
+2. Enable `bubblegum` in the Extension Manager.
 3. In an Action Graph, add `Bubblegum Sticky Pick`.
 4. Drive `execIn` from `On Playback Tick` or `On Physics Step`.
 5. Set `helperPrimPath` to a prim whose world-space bounds define the sticky zone.

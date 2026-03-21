@@ -17,4 +17,4 @@ readme = "docs/README.md"
 "omni.usd" = {}
 
 [[python.module]]
-name = "bubblegum.isaac.sticky_node"
+name = "bubblegum"

@@ -1,7 +1,7 @@
 import omni.ext
 
 
-class BubblegumIsaacStickyNodeExtension(omni.ext.IExt):
+class BubblegumExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
         self._ext_id = ext_id
 
