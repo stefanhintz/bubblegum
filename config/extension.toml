@@ -20,7 +20,6 @@ readme = "docs/README.md"
 
 [[python.module]]
 name = "bubblegum"
-path = "python"
 
 [fswatcher.patterns]
 include = ["*.ogn", "*.py"]
