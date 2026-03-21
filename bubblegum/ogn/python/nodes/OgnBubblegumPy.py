@@ -8,6 +8,7 @@ class OgnBubblegumPy:
         def __init__(self):
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
+            self.restore_kinematic_enabled = None
 
     @staticmethod
     def internal_state():
@@ -44,9 +45,10 @@ class OgnBubblegumPy:
         if not db.inputs.stick and state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
-                OgnBubblegumPy._set_rigid_body_simulation_enabled(released_prim, True)
+                OgnBubblegumPy._restore_kinematic_state(released_prim, state.restore_kinematic_enabled)
             state.attached_prim_path = ""
             state.attached_to_helper = Gf.Matrix4d(1.0)
+            state.restore_kinematic_enabled = None
             db.outputs.didRelease = True
 
         if state.attached_prim_path:
@@ -65,7 +67,7 @@ class OgnBubblegumPy:
             if candidate_prim is not None:
                 state.attached_prim_path = candidate_prim.GetPath().pathString
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
-                OgnBubblegumPy._set_rigid_body_simulation_enabled(candidate_prim, False)
+                state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
                 db.outputs.didAttach = True
 
         db.outputs.isAttached = bool(state.attached_prim_path)
@@ -189,7 +191,38 @@ class OgnBubblegumPy:
         return attached_world * helper_world.GetInverse()
 
     @staticmethod
-    def _set_rigid_body_simulation_enabled(prim, enabled):
+    def _set_kinematic_while_held(prim):
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return None
+
+        try:
+            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+            rigid_body_api.GetRigidBodyEnabledAttr().Set(True)
+            kinematic_attr = rigid_body_api.GetKinematicEnabledAttr()
+            was_kinematic = kinematic_attr.Get()
+            if was_kinematic is None:
+                was_kinematic = False
+            kinematic_attr.Set(True)
+            return was_kinematic
+        except Exception:
+            return None
+
+    @staticmethod
+    def _restore_kinematic_state(prim, enabled):
+        if enabled is None or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return
+
+        try:
+            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+            rigid_body_api.GetRigidBodyEnabledAttr().Set(True)
+            rigid_body_api.GetKinematicEnabledAttr().Set(enabled)
+            if not enabled:
+                OgnBubblegumPy._wake_rigid_body(prim)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _wake_rigid_body(prim):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             return
 
@@ -197,23 +230,13 @@ class OgnBubblegumPy:
             import numpy as np
             import omni.physics.tensors as physics_tensors
 
-            # Ensure the USD rigid body itself is enabled; the runtime simulation toggle below
-            # is only meant to pause/resume simulation while the object is held.
-            UsdPhysics.RigidBodyAPI(prim).GetRigidBodyEnabledAttr().Set(True)
-
             simulation_view = physics_tensors.create_simulation_view("numpy")
             rigid_body_view = simulation_view.create_rigid_body_view(prim.GetPath().pathString)
             if rigid_body_view.count <= 0:
                 return
 
             indices = np.arange(rigid_body_view.count, dtype=np.int32)
-            disable_simulations = np.zeros(rigid_body_view.count, dtype=np.uint8)
-            if not enabled:
-                disable_simulations[:] = 1
-
-            rigid_body_view.set_disable_simulations(disable_simulations, indices)
-            if enabled:
-                rigid_body_view.wake_up(indices)
+            rigid_body_view.wake_up(indices)
         except Exception:
             pass
 
