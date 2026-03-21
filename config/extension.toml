@@ -1,3 +1,8 @@
+# Extension configuration file.
+# Visit the "Extension configuration file (extension.toml)" section for more details:
+# https://docs.omniverse.nvidia.com/kit/docs/kit-manual/latest/guide/extensions_advanced.html
+#
+
 [core]
 reloadable = true
 order = 0
@@ -5,22 +10,22 @@ order = 0
 [package]
 version = "0.1.0"
 title = "Bubblegum Sticky Node"
-category = "Simulation"
-description = "Minimal Isaac Sim OmniGraph node for sticky pick and release behavior."
+description = "OmniGraph node for sticky pick and release behavior"
 authors = ["Stefan Hintz"]
-keywords = ["Isaac Sim", "OmniGraph", "sticky", "pick", "gripper"]
+keywords = ["\"sticky\"","\"pick\"","\"gripper\""]
+changelog = "docs/CHANGELOG.md"
 readme = "docs/README.md"
+preview_image = "data/preview.png"
+icon = "data/icon.png"
 
 [dependencies]
 "omni.graph" = {}
-"omni.graph.core" = {}
 "omni.graph.tools" = {}
-"omni.graph.action" = {}
-"omni.usd" = {}
 
+# define the Python module that the extension provides
 [[python.module]]
 name = "bubblegum"
 
-[fswatcher.patterns]
-include = ["*.ogn", "*.py"]
-exclude = ["Ogn*Database.py"]
+[settings]
+exts."bubblegum".timeout = 5
+
