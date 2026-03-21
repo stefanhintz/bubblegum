@@ -1,6 +1,6 @@
 import omni.graph.core as og
 import omni.usd
-from pxr import Gf, Usd, UsdGeom
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 
 class OgnBubblegumPy:
@@ -42,6 +42,9 @@ class OgnBubblegumPy:
             return False
 
         if not db.inputs.stick and state.attached_prim_path:
+            released_prim = stage.GetPrimAtPath(state.attached_prim_path)
+            if released_prim.IsValid():
+                OgnBubblegumPy._wake_rigid_body(released_prim)
             state.attached_prim_path = ""
             state.attached_to_helper = Gf.Matrix4d(1.0)
             db.outputs.didRelease = True
@@ -183,6 +186,22 @@ class OgnBubblegumPy:
         helper_world = omni.usd.get_world_transform_matrix(helper_prim)
         attached_world = omni.usd.get_world_transform_matrix(attached_prim)
         return attached_world * helper_world.GetInverse()
+
+    @staticmethod
+    def _wake_rigid_body(prim):
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return
+
+        try:
+            import omni.physics.tensors as physics_tensors
+
+            simulation_view = physics_tensors.create_simulation_view("warp")
+            rigid_body_view = simulation_view.create_rigid_body_view(prim.GetPath().pathString)
+            if rigid_body_view.count > 0:
+                rigid_body_view.wake_up()
+        except Exception:
+            # If the runtime physics wake-up path is unavailable, just fall back to leaving the prim transform as-is.
+            pass
 
     @staticmethod
     def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper):
