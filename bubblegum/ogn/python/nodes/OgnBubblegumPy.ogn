@@ -25,7 +25,7 @@
                 "default": true
             },
             "helperPrimPath": {
-                "type": "token",
+                "type": "path",
                 "uiName": "Helper Prim Path",
                 "description": "Prim path whose world-space bounds define the sticky volume.",
                 "default": ""

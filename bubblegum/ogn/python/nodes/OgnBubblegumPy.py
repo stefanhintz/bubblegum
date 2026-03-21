@@ -14,7 +14,7 @@ class OgnBubblegumPy:
 
     @staticmethod
     def compute(db) -> bool:
-        state = db.internal_state
+        state = db.per_instance_state
         OgnBubblegumPy._set_exec_out(db)
         db.outputs.didAttach = False
         db.outputs.didRelease = False
@@ -161,6 +161,8 @@ class OgnBubblegumPy:
 
         xform_cache = UsdGeom.XformCache(Usd.TimeCode.Default())
         current_local = xform_cache.GetLocalTransformation(attached_prim)
+        if isinstance(current_local, tuple):
+            current_local = current_local[0]
         current_scale = OgnBubblegumPy._extract_scale(current_local)
         parent_world = xform_cache.GetParentToWorldTransform(attached_prim)
         target_local = helper_world * parent_world.GetInverse()
