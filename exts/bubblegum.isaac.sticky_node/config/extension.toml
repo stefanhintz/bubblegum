@@ -1,0 +1,20 @@
+[core]
+reloadable = true
+order = 0
+
+[package]
+version = "0.1.0"
+title = "Bubblegum Sticky Node"
+category = "Simulation"
+description = "Minimal Isaac Sim OmniGraph node for sticky pick and release behavior."
+authors = ["Stefan Hintz"]
+keywords = ["Isaac Sim", "OmniGraph", "sticky", "pick", "gripper"]
+readme = "docs/README.md"
+
+[dependencies]
+"omni.graph.core" = {}
+"omni.graph.action" = {}
+"omni.usd" = {}
+
+[[python.module]]
+name = "bubblegum.isaac.sticky_node"
