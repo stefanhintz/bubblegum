@@ -45,7 +45,7 @@ class OgnBubblegumPy:
         if not db.inputs.stick and state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
-                OgnBubblegumPy._restore_kinematic_state(released_prim, state.restore_kinematic_enabled)
+                OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
             state.attached_prim_path = ""
             state.attached_to_helper = Gf.Matrix4d(1.0)
             state.restore_kinematic_enabled = None
@@ -208,14 +208,25 @@ class OgnBubblegumPy:
             return None
 
     @staticmethod
-    def _restore_kinematic_state(prim, enabled):
+    def _reset_rigid_body_after_release(prim, enabled):
         if enabled is None or not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             return
 
         try:
             rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
-            rigid_body_api.GetRigidBodyEnabledAttr().Set(True)
-            rigid_body_api.GetKinematicEnabledAttr().Set(enabled)
+            rigid_body_enabled_attr = rigid_body_api.GetRigidBodyEnabledAttr()
+            kinematic_attr = rigid_body_api.GetKinematicEnabledAttr()
+
+            # Explicit reset sequence:
+            # 1. disable rigid body
+            # 2. enable kinematic
+            # 3. restore requested kinematic state
+            # 4. re-enable rigid body
+            rigid_body_enabled_attr.Set(False)
+            kinematic_attr.Set(True)
+            kinematic_attr.Set(enabled)
+            rigid_body_enabled_attr.Set(True)
+
             if not enabled:
                 OgnBubblegumPy._wake_rigid_body(prim)
         except Exception:
