@@ -6,6 +6,8 @@ import carb
 import omni.ext
 import omni.graph.core as og
 
+from .nodes.OgnBubblegumStickyPick import OgnBubblegumStickyPick  # noqa: F401
+
 
 class BubblegumExtension(omni.ext.IExt):
     def on_startup(self, ext_id):
@@ -54,6 +56,12 @@ class BubblegumExtension(omni.ext.IExt):
         except Exception as exc:
             carb.log_error(f"[bubblegum] register_python_node() failed: {exc!r}")
             return
+
+        try:
+            og.register_node_type("bubblegum.BubblegumStickyPick", 1)
+            carb.log_warn("[bubblegum] register_node_type('bubblegum.BubblegumStickyPick', 1) called")
+        except Exception as exc:
+            carb.log_error(f"[bubblegum] register_node_type() failed: {exc!r}")
 
         after = sorted(name for name in og.get_registered_nodes() if "bubblegum" in name.lower())
         carb.log_warn(f"[bubblegum] registered_after={after}")
