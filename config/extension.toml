@@ -9,10 +9,10 @@ order = 0
 
 [package]
 version = "0.1.0"
-title = "Bubblegum Sticky Node"
-description = "OmniGraph node for sticky pick and release behavior"
+title = "Bubblegum Sticky Pick"
+description = "OmniGraph node that sticks an overlapping prim to a helper volume and releases it on command."
 authors = ["Stefan Hintz"]
-keywords = ["\"sticky\"","\"pick\"","\"gripper\""]
+keywords = ["sticky", "pick", "gripper", "isaac-sim", "omnigraph"]
 changelog = "docs/CHANGELOG.md"
 readme = "docs/README.md"
 preview_image = "data/preview.png"
@@ -20,7 +20,10 @@ icon = "data/icon.png"
 
 [dependencies]
 "omni.graph" = {}
+"omni.graph.core" = {}
 "omni.graph.tools" = {}
+"omni.graph.action" = {}
+"omni.usd" = {}
 
 # define the Python module that the extension provides
 [[python.module]]
@@ -28,4 +31,3 @@ name = "bubblegum"
 
 [settings]
 exts."bubblegum".timeout = 5
-

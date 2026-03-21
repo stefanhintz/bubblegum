@@ -6,10 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.0] - Unreleased
 
 ### Added
-- Initial release
+- Bubblegum Sticky Pick OmniGraph node scaffold
+- Sticky attach and release behavior using helper-prim overlap
 
 ### Changed
-- 
+- Replaced the generated sample node with sticky-pick behavior and project-specific metadata
 
 ### Fixed
 - 

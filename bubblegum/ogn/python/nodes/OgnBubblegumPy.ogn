@@ -3,38 +3,80 @@
         "version": 1,
         "language": "python",
         "icon": "icons/icon.svg",
-        "uiName": "OgnBubblegumPy",
+        "uiName": "Bubblegum Sticky Pick",
         "description": [
-            "The description key value is required on all nodes and will be used in the generated documentation of the node.",
-            "Visit https://docs.omniverse.nvidia.com/kit/docs/omni.graph.docs/latest/dev/ogn/ogn_reference_guide.html",
-            "for a detailed guide to the syntax of the .ogn file.",
-            "Visit https://docs.omniverse.nvidia.com/kit/docs/omni.graph.docs/latest/dev/ogn/attribute_types.html",
-            "for more details about the supported attribute data types for inputs and outputs."
+            "Attach the first overlapping prim to a helper volume and keep it snapped to the helper until released.",
+            "This first-pass version is intentionally simple: no padding, no filters beyond optional candidates, and fail-fast on bad prim paths."
         ],
         "categoryDefinitions": "config/CategoryDefinition.json",
         "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
         "inputs": {
-            "inputAttribute1": {
-                "type": "int",
-                "uiName": "Input Attribute 1",
-                "description": "Description for this attribute",
-                "default": 0
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger."
             },
-            "inputAttribute2": {
+            "enabled": {
+                "type": "bool",
+                "uiName": "Enabled",
+                "description": "When false, the node forwards execution but does not change attachment state.",
+                "default": true
+            },
+            "helperPrimPath": {
                 "type": "token",
-                "uiName": "Input Attribute 2",
-                "description": "Description for this attribute",
-                "default": "Token1",
-                "metadata": {
-                    "allowedTokens": [ "Token1", "Token2", "Token3" ]
-                }
+                "uiName": "Helper Prim Path",
+                "description": "Prim path whose world-space bounds define the sticky volume.",
+                "default": ""
+            },
+            "stick": {
+                "type": "bool",
+                "uiName": "Stick",
+                "description": "When true and nothing is attached, attach the first overlapping prim.",
+                "default": false
+            },
+            "release": {
+                "type": "bool",
+                "uiName": "Release",
+                "description": "When true, release the currently attached prim.",
+                "default": false
+            },
+            "candidatePrimPaths": {
+                "type": "token[]",
+                "uiName": "Candidate Prim Paths",
+                "description": "Optional list of prim paths that may be attached. If empty, the whole stage is scanned.",
+                "default": []
             }
         },
         "outputs": {
-            "outputAttribute1": {
-                "type": "double",
-                "uiName": "Output Attribute 1",
-                "description": "Description for this attribute"
+            "execOut": {
+                "type": "execution",
+                "description": "Execution trigger output."
+            },
+            "isAttached": {
+                "type": "bool",
+                "uiName": "Is Attached",
+                "description": "True when a prim is currently attached.",
+                "default": false
+            },
+            "attachedPrimPath": {
+                "type": "token",
+                "uiName": "Attached Prim Path",
+                "description": "Path of the currently attached prim.",
+                "default": ""
+            },
+            "didAttach": {
+                "type": "bool",
+                "uiName": "Did Attach",
+                "description": "True only on the frame where an attachment happened.",
+                "default": false
+            },
+            "didRelease": {
+                "type": "bool",
+                "uiName": "Did Release",
+                "description": "True only on the frame where a release happened.",
+                "default": false
             }
         }
     }
