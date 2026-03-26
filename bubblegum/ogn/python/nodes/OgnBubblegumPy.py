@@ -1,3 +1,5 @@
+import fnmatch
+
 import omni.graph.core as og
 import omni.timeline
 import omni.usd
@@ -173,11 +175,9 @@ class OgnBubblegumPy:
         helper_path = helper_prim.GetPath()
 
         if candidate_paths:
-            for candidate_path in candidate_paths:
-                candidate_prim = stage.GetPrimAtPath(candidate_path)
-                if not candidate_prim.IsValid():
-                    db.log_error(f"Candidate prim does not exist: {candidate_path}")
-                    return None
+            for candidate_prim in stage.Traverse():
+                if not OgnBubblegumPy._matches_candidate_filter(candidate_prim, candidate_paths):
+                    continue
                 if OgnBubblegumPy._is_attachable_candidate(helper_path, candidate_prim, helper_bounds):
                     return candidate_prim
             return None
@@ -187,6 +187,28 @@ class OgnBubblegumPy:
                 return candidate_prim
 
         return None
+
+    @staticmethod
+    def _matches_candidate_filter(candidate_prim, candidate_filters):
+        candidate_path = candidate_prim.GetPath().pathString
+        candidate_path_without_root = candidate_path.lstrip("/")
+
+        for candidate_filter in candidate_filters:
+            normalized_filter = candidate_filter.strip()
+            if not normalized_filter:
+                continue
+
+            if (
+                candidate_path == normalized_filter
+                or candidate_path_without_root == normalized_filter
+                or fnmatch.fnmatchcase(candidate_path, normalized_filter)
+                or fnmatch.fnmatchcase(candidate_path_without_root, normalized_filter)
+                or fnmatch.fnmatchcase(candidate_path, f"*/{normalized_filter}")
+                or fnmatch.fnmatchcase(candidate_path_without_root, f"*/{normalized_filter}")
+            ):
+                return True
+
+        return False
 
     @staticmethod
     def _is_attachable_candidate(helper_path, candidate_prim, helper_bounds):

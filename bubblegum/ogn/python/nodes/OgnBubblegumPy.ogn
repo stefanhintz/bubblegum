@@ -38,7 +38,7 @@
             "candidatePrimPaths": {
                 "type": "token[]",
                 "uiName": "Candidate Prim Paths",
-                "description": "Optional list of prim paths that may be attached. If empty, the whole stage is scanned.",
+                "description": "Optional list of prim paths or wildcard filters that may be attached, for example /World/Boxes/* or pallet-with-boxes/*. If empty, the whole stage is scanned.",
                 "default": []
             }
         },
