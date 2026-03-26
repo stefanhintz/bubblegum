@@ -33,7 +33,7 @@ Notes:
 - overlap uses world-space AABB intersection
 - there is no padding, filtering, or physics joint yet
 - the held object preserves its initial relative offset to the helper
-- stopping simulation clears the current attachment state instead of restoring it on the next run
+- stopping simulation clears the current attachment state and restores the held object to its pre-attach transform
 - invalid prim paths fail fast
 
 To enable this extension, go to `Window > Extensions` and enable `bubblegum`.

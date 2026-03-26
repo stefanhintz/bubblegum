@@ -10,6 +10,7 @@ class OgnBubblegumPy:
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
             self.restore_kinematic_enabled = None
+            self.original_local_transform = None
 
     @staticmethod
     def internal_state():
@@ -35,7 +36,7 @@ class OgnBubblegumPy:
         timeline = omni.timeline.get_timeline_interface()
         is_playing = timeline.is_playing() if timeline is not None else True
         if not is_playing:
-            OgnBubblegumPy._clear_attachment_state(stage, state)
+            OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=True)
             db.outputs.isAttached = False
             db.outputs.attachedPrimPath = ""
             return True
@@ -52,7 +53,7 @@ class OgnBubblegumPy:
             return False
 
         if not db.inputs.stick and state.attached_prim_path:
-            OgnBubblegumPy._clear_attachment_state(stage, state)
+            OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=False)
             db.outputs.didRelease = True
 
         if state.attached_prim_path:
@@ -69,7 +70,7 @@ class OgnBubblegumPy:
                 candidate_paths=OgnBubblegumPy._normalize_candidate_paths(db.inputs.candidatePrimPaths),
             )
             if candidate_prim is not None:
-                OgnBubblegumPy._prepare_transform_control(candidate_prim)
+                state.original_local_transform = OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.attached_prim_path = candidate_prim.GetPath().pathString
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
@@ -114,15 +115,18 @@ class OgnBubblegumPy:
         return [value]
 
     @staticmethod
-    def _clear_attachment_state(stage, state):
+    def _clear_attachment_state(stage, state, restore_transform):
         if state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
+                if restore_transform and state.original_local_transform is not None:
+                    OgnBubblegumPy._restore_local_transform(released_prim, state.original_local_transform)
                 OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
         state.restore_kinematic_enabled = None
+        state.original_local_transform = None
 
     @staticmethod
     def _find_candidate_prim(db, stage, helper_prim, candidate_paths):
@@ -271,7 +275,7 @@ class OgnBubblegumPy:
     def _prepare_transform_control(prim):
         xformable = UsdGeom.Xformable(prim)
         if not xformable:
-            return
+            return None
 
         xform_cache = UsdGeom.XformCache(Usd.TimeCode.Default())
         current_local = xform_cache.GetLocalTransformation(prim)
@@ -280,6 +284,16 @@ class OgnBubblegumPy:
 
         transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, current_local)
         transform_op.Set(current_local)
+        return current_local
+
+    @staticmethod
+    def _restore_local_transform(prim, local_transform):
+        xformable = UsdGeom.Xformable(prim)
+        if not xformable:
+            return
+
+        transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, local_transform)
+        transform_op.Set(local_transform)
 
     @staticmethod
     def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper):
