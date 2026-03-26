@@ -10,7 +10,9 @@ class OgnBubblegumPy:
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
             self.restore_kinematic_enabled = None
-            self.original_local_transform = None
+            self.original_local_transforms = {}
+            self.original_kinematic_enabled = {}
+            self.touched_prim_paths = set()
 
     @staticmethod
     def internal_state():
@@ -36,7 +38,7 @@ class OgnBubblegumPy:
         timeline = omni.timeline.get_timeline_interface()
         is_playing = timeline.is_playing() if timeline is not None else True
         if not is_playing:
-            OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=True)
+            OgnBubblegumPy._restore_all_touched_objects(stage, state)
             db.outputs.isAttached = False
             db.outputs.attachedPrimPath = ""
             return True
@@ -70,10 +72,16 @@ class OgnBubblegumPy:
                 candidate_paths=OgnBubblegumPy._normalize_candidate_paths(db.inputs.candidatePrimPaths),
             )
             if candidate_prim is not None:
-                state.original_local_transform = OgnBubblegumPy._prepare_transform_control(candidate_prim)
+                candidate_path = candidate_prim.GetPath().pathString
+                current_local = OgnBubblegumPy._prepare_transform_control(candidate_prim)
+                if candidate_path not in state.original_local_transforms and current_local is not None:
+                    state.original_local_transforms[candidate_path] = Gf.Matrix4d(current_local)
+                state.touched_prim_paths.add(candidate_path)
                 state.attached_prim_path = candidate_prim.GetPath().pathString
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
+                if candidate_path not in state.original_kinematic_enabled:
+                    state.original_kinematic_enabled[candidate_path] = state.restore_kinematic_enabled
                 db.outputs.didAttach = True
 
         db.outputs.isAttached = bool(state.attached_prim_path)
@@ -119,14 +127,38 @@ class OgnBubblegumPy:
         if state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
-                if restore_transform and state.original_local_transform is not None:
-                    OgnBubblegumPy._restore_local_transform(released_prim, state.original_local_transform)
+                if restore_transform:
+                    original_local = state.original_local_transforms.get(state.attached_prim_path)
+                    if original_local is not None:
+                        OgnBubblegumPy._restore_local_transform(released_prim, original_local)
                 OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
         state.restore_kinematic_enabled = None
-        state.original_local_transform = None
+
+    @staticmethod
+    def _restore_all_touched_objects(stage, state):
+        if state.attached_prim_path:
+            state.touched_prim_paths.add(state.attached_prim_path)
+
+        for prim_path in list(state.touched_prim_paths):
+            prim = stage.GetPrimAtPath(prim_path)
+            if not prim.IsValid():
+                continue
+
+            original_local = state.original_local_transforms.get(prim_path)
+            if original_local is not None:
+                OgnBubblegumPy._restore_local_transform(prim, original_local)
+
+            OgnBubblegumPy._reset_rigid_body_after_release(prim, state.original_kinematic_enabled.get(prim_path))
+
+        state.attached_prim_path = ""
+        state.attached_to_helper = Gf.Matrix4d(1.0)
+        state.restore_kinematic_enabled = None
+        state.touched_prim_paths.clear()
+        state.original_local_transforms.clear()
+        state.original_kinematic_enabled.clear()
 
     @staticmethod
     def _find_candidate_prim(db, stage, helper_prim, candidate_paths):
