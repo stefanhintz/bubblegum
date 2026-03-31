@@ -379,19 +379,12 @@ class OgnBubblegumPy:
         current_local = xform_cache.GetLocalTransformation(attached_prim)
         if isinstance(current_local, tuple):
             current_local = current_local[0]
-        current_scale = OgnBubblegumPy._extract_scale(current_local)
         parent_world = xform_cache.GetParentToWorldTransform(attached_prim)
         target_local = target_world * parent_world.GetInverse()
 
-        target_matrix = OgnBubblegumPy._compose_matrix(
-            translation=target_local.ExtractTranslation(),
-            rotation=target_local.ExtractRotation(),
-            scale=current_scale,
-        )
-
         xformable = UsdGeom.Xformable(attached_prim)
         transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, current_local)
-        transform_op.Set(target_matrix)
+        transform_op.Set(target_local)
 
     @staticmethod
     def _get_or_create_transform_op(xformable, current_local):
@@ -424,21 +417,3 @@ class OgnBubblegumPy:
             prop_name = prop.GetName()
             if prop_name.startswith("xformOp:") and prop_name != keep_name:
                 prim.RemoveProperty(prop_name)
-
-    @staticmethod
-    def _extract_scale(matrix):
-        rotation_matrix = matrix.ExtractRotationMatrix()
-        return Gf.Vec3d(*(axis.GetLength() for axis in rotation_matrix))
-
-    @staticmethod
-    def _compose_matrix(translation, rotation, scale):
-        scale_matrix = Gf.Matrix4d(1.0)
-        scale_matrix.SetScale(scale)
-
-        rotation_matrix = Gf.Matrix4d(1.0)
-        rotation_matrix.SetRotate(rotation)
-
-        translation_matrix = Gf.Matrix4d(1.0)
-        translation_matrix.SetTranslate(translation)
-
-        return scale_matrix * rotation_matrix * translation_matrix
