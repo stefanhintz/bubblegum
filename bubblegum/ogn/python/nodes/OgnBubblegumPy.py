@@ -15,6 +15,27 @@ class OgnBubblegumPy:
             self.original_local_transforms = {}
             self.original_kinematic_enabled = {}
             self.touched_prim_paths = set()
+            self._timeline_sub = None
+            self._subscribe_timeline_stop()
+
+        def _subscribe_timeline_stop(self):
+            timeline = omni.timeline.get_timeline_interface()
+            if timeline is None:
+                return
+
+            self._timeline_sub = timeline.get_timeline_event_stream().create_subscription_to_pop(
+                self._on_timeline_event
+            )
+
+        def _on_timeline_event(self, event):
+            if event.type != int(omni.timeline.TimelineEventType.STOP):
+                return
+
+            stage = omni.usd.get_context().get_stage()
+            if stage is None:
+                return
+
+            OgnBubblegumPy._restore_all_touched_objects(stage, self)
 
     @staticmethod
     def internal_state():
