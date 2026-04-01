@@ -13,6 +13,7 @@ class OgnBubblegumPy:
             self.attached_to_helper = Gf.Matrix4d(1.0)
             self.restore_kinematic_enabled = None
             self.original_local_transforms = {}
+            self.original_xform_states = {}
             self.original_kinematic_enabled = {}
             self.touched_prim_paths = set()
             self._timeline_sub = None
@@ -96,6 +97,8 @@ class OgnBubblegumPy:
             )
             if candidate_prim is not None:
                 candidate_path = candidate_prim.GetPath().pathString
+                if candidate_path not in state.original_xform_states:
+                    state.original_xform_states[candidate_path] = OgnBubblegumPy._capture_xform_state(candidate_prim)
                 current_local = OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 if candidate_path not in state.original_local_transforms and current_local is not None:
                     state.original_local_transforms[candidate_path] = Gf.Matrix4d(current_local)
@@ -151,9 +154,11 @@ class OgnBubblegumPy:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
                 if restore_transform:
-                    original_local = state.original_local_transforms.get(state.attached_prim_path)
-                    if original_local is not None:
-                        OgnBubblegumPy._restore_local_transform(released_prim, original_local)
+                    OgnBubblegumPy._restore_original_transform_state(
+                        released_prim,
+                        state.original_xform_states.get(state.attached_prim_path),
+                        state.original_local_transforms.get(state.attached_prim_path),
+                    )
                 OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
 
         state.attached_prim_path = ""
@@ -170,9 +175,11 @@ class OgnBubblegumPy:
             if not prim.IsValid():
                 continue
 
-            original_local = state.original_local_transforms.get(prim_path)
-            if original_local is not None:
-                OgnBubblegumPy._restore_local_transform(prim, original_local)
+            OgnBubblegumPy._restore_original_transform_state(
+                prim,
+                state.original_xform_states.get(prim_path),
+                state.original_local_transforms.get(prim_path),
+            )
 
             OgnBubblegumPy._reset_rigid_body_after_release(prim, state.original_kinematic_enabled.get(prim_path))
 
@@ -181,6 +188,7 @@ class OgnBubblegumPy:
         state.restore_kinematic_enabled = None
         state.touched_prim_paths.clear()
         state.original_local_transforms.clear()
+        state.original_xform_states.clear()
         state.original_kinematic_enabled.clear()
 
     @staticmethod
@@ -362,6 +370,15 @@ class OgnBubblegumPy:
         return current_local
 
     @staticmethod
+    def _restore_original_transform_state(prim, xform_state, local_transform):
+        if xform_state is not None:
+            OgnBubblegumPy._restore_xform_state(prim, xform_state)
+            return
+
+        if local_transform is not None:
+            OgnBubblegumPy._restore_local_transform(prim, local_transform)
+
+    @staticmethod
     def _restore_local_transform(prim, local_transform):
         xformable = UsdGeom.Xformable(prim)
         if not xformable:
@@ -369,6 +386,60 @@ class OgnBubblegumPy:
 
         transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, local_transform)
         transform_op.Set(local_transform)
+
+    @staticmethod
+    def _capture_xform_state(prim):
+        xformable = UsdGeom.Xformable(prim)
+        if not xformable:
+            return None
+
+        ordered_ops = list(xformable.GetOrderedXformOps())
+        reset_stack = False
+        if hasattr(xformable, "GetResetXformStack"):
+            reset_stack = bool(xformable.GetResetXformStack())
+
+        ops = []
+        for op in ordered_ops:
+            try:
+                value = op.Get()
+            except Exception:
+                value = None
+
+            op_name = str(op.GetName())
+            name_parts = op_name.split(":")
+            suffix = ":".join(name_parts[2:]) if len(name_parts) > 2 else ""
+            ops.append(
+                {
+                    "op_type": op.GetOpType(),
+                    "precision": op.GetPrecision(),
+                    "suffix": suffix,
+                    "is_inverse": op.IsInverseOp(),
+                    "value": value,
+                }
+            )
+
+        return {"reset_stack": reset_stack, "ops": ops}
+
+    @staticmethod
+    def _restore_xform_state(prim, xform_state):
+        xformable = UsdGeom.Xformable(prim)
+        if not xformable or xform_state is None:
+            return
+
+        OgnBubblegumPy._remove_all_xform_ops(xformable)
+        restored_ops = []
+        for op_state in xform_state["ops"]:
+            op = xformable.AddXformOp(
+                op_state["op_type"],
+                precision=op_state["precision"],
+                opSuffix=op_state["suffix"],
+                isInverseOp=op_state["is_inverse"],
+            )
+            if op_state["value"] is not None:
+                op.Set(op_state["value"])
+            restored_ops.append(op)
+
+        xformable.SetXformOpOrder(restored_ops, resetXformStack=xform_state["reset_stack"])
 
     @staticmethod
     def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper):
@@ -416,4 +487,13 @@ class OgnBubblegumPy:
         for prop in list(prim.GetProperties()):
             prop_name = prop.GetName()
             if prop_name.startswith("xformOp:") and prop_name != keep_name:
+                prim.RemoveProperty(prop_name)
+
+    @staticmethod
+    def _remove_all_xform_ops(xformable):
+        xformable.ClearXformOpOrder()
+        prim = xformable.GetPrim()
+        for prop in list(prim.GetProperties()):
+            prop_name = prop.GetName()
+            if prop_name.startswith("xformOp:"):
                 prim.RemoveProperty(prop_name)
