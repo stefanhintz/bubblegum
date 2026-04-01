@@ -45,13 +45,13 @@ class OgnBubblegumPy:
     @staticmethod
     def compute(db) -> bool:
         state = db.per_instance_state
-        OgnBubblegumPy._set_exec_out(db)
-        db.outputs.didAttach = False
-        db.outputs.didRelease = False
+        event_attached = False
+        event_released = False
         db.outputs.isAttached = bool(state.attached_prim_path)
         db.outputs.attachedPrimPath = state.attached_prim_path
 
         if not db.inputs.enabled:
+            OgnBubblegumPy._set_exec_outputs(db, event_attached, event_released)
             return True
 
         stage = omni.usd.get_context().get_stage()
@@ -65,6 +65,7 @@ class OgnBubblegumPy:
             OgnBubblegumPy._restore_all_touched_objects(stage, state)
             db.outputs.isAttached = False
             db.outputs.attachedPrimPath = ""
+            OgnBubblegumPy._set_exec_outputs(db, event_attached, event_released)
             return True
 
         helper_paths = OgnBubblegumPy._extract_target_paths(db.inputs.helperPrim)
@@ -80,7 +81,7 @@ class OgnBubblegumPy:
 
         if not db.inputs.stick and state.attached_prim_path:
             OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=False)
-            db.outputs.didRelease = True
+            event_released = True
 
         if state.attached_prim_path:
             attached_prim = stage.GetPrimAtPath(state.attached_prim_path)
@@ -109,16 +110,21 @@ class OgnBubblegumPy:
                 state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
                 if candidate_path not in state.original_kinematic_enabled:
                     state.original_kinematic_enabled[candidate_path] = state.restore_kinematic_enabled
-                db.outputs.didAttach = True
+                event_attached = True
 
         db.outputs.isAttached = bool(state.attached_prim_path)
         db.outputs.attachedPrimPath = state.attached_prim_path
+        OgnBubblegumPy._set_exec_outputs(db, event_attached, event_released)
         return True
 
     @staticmethod
-    def _set_exec_out(db):
+    def _set_exec_outputs(db, event_attached, event_released):
         if hasattr(db.outputs, "execOut"):
             db.outputs.execOut = og.ExecutionAttributeState.ENABLED
+        if hasattr(db.outputs, "execAttached") and event_attached:
+            db.outputs.execAttached = og.ExecutionAttributeState.ENABLED
+        if hasattr(db.outputs, "execReleased") and event_released:
+            db.outputs.execReleased = og.ExecutionAttributeState.ENABLED
 
     @staticmethod
     def _normalize_candidate_paths(candidate_paths):

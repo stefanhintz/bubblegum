@@ -26,10 +26,10 @@ Inputs:
 Outputs:
 
 - `execOut`
+- `execAttached`
+- `execReleased`
 - `isAttached`
 - `attachedPrimPath`
-- `didAttach`
-- `didRelease`
 
 Notes:
 

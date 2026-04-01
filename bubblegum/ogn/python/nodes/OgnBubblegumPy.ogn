@@ -53,6 +53,14 @@
                 "type": "execution",
                 "description": "Execution trigger output."
             },
+            "execAttached": {
+                "type": "execution",
+                "description": "Execution trigger output fired only when a new prim is attached."
+            },
+            "execReleased": {
+                "type": "execution",
+                "description": "Execution trigger output fired only when the current prim is released."
+            },
             "isAttached": {
                 "type": "bool",
                 "uiName": "Is Attached",
@@ -64,18 +72,6 @@
                 "uiName": "Attached Prim Path",
                 "description": "Path of the currently attached prim.",
                 "default": ""
-            },
-            "didAttach": {
-                "type": "bool",
-                "uiName": "Did Attach",
-                "description": "True only on the frame where an attachment happened.",
-                "default": false
-            },
-            "didRelease": {
-                "type": "bool",
-                "uiName": "Did Release",
-                "description": "True only on the frame where stick was disabled and the current attachment was released.",
-                "default": false
             }
         }
     }
