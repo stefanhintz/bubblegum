@@ -94,6 +94,7 @@ class OgnBubblegumPy:
                 stage=stage,
                 helper_prim=helper_prim,
                 candidate_paths=OgnBubblegumPy._normalize_candidate_paths(db.inputs.candidatePrimPaths),
+                exclude_paths=OgnBubblegumPy._normalize_candidate_paths(db.inputs.excludePrimPaths),
             )
             if candidate_prim is not None:
                 candidate_path = candidate_prim.GetPath().pathString
@@ -192,7 +193,7 @@ class OgnBubblegumPy:
         state.original_kinematic_enabled.clear()
 
     @staticmethod
-    def _find_candidate_prim(db, stage, helper_prim, candidate_paths):
+    def _find_candidate_prim(db, stage, helper_prim, candidate_paths, exclude_paths):
         helper_bounds = OgnBubblegumPy._compute_world_aligned_bounds(helper_prim)
         if helper_bounds.IsEmpty():
             db.log_error(
@@ -205,6 +206,8 @@ class OgnBubblegumPy:
 
         if candidate_paths:
             for candidate_prim in stage.Traverse():
+                if OgnBubblegumPy._matches_candidate_filter(candidate_prim, exclude_paths):
+                    continue
                 if not OgnBubblegumPy._matches_candidate_filter(candidate_prim, candidate_paths):
                     continue
                 if OgnBubblegumPy._is_attachable_candidate(helper_path, candidate_prim, helper_bounds):
@@ -212,6 +215,8 @@ class OgnBubblegumPy:
             return None
 
         for candidate_prim in stage.Traverse():
+            if OgnBubblegumPy._matches_candidate_filter(candidate_prim, exclude_paths):
+                continue
             if OgnBubblegumPy._is_attachable_candidate(helper_path, candidate_prim, helper_bounds):
                 return candidate_prim
 

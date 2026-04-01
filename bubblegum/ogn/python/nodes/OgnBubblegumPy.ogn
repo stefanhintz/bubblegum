@@ -40,6 +40,12 @@
                 "uiName": "Candidate Prim Paths",
                 "description": "Optional list of prim paths or wildcard filters that may be attached, for example /World/Boxes/* or pallet-with-boxes/*. If empty, the whole stage is scanned.",
                 "default": []
+            },
+            "excludePrimPaths": {
+                "type": "token[]",
+                "uiName": "Exclude Prim Paths",
+                "description": "Optional list of prim paths or wildcard filters that must never be attached, for example /World/Robot/* or gripper/*. Exclusions win over candidate filters.",
+                "default": []
             }
         },
         "outputs": {
