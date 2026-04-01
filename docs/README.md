@@ -17,7 +17,6 @@ The node implements a simple sticky-gripper behavior:
 Inputs:
 
 - `execIn`
-- `enabled`
 - `helperPrim`
 - `stick`
 - `candidatePrimPaths`
@@ -25,7 +24,6 @@ Inputs:
 
 Outputs:
 
-- `execOut`
 - `execAttached`
 - `execReleased`
 - `isAttached`

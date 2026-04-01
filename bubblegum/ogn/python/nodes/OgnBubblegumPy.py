@@ -50,10 +50,6 @@ class OgnBubblegumPy:
         db.outputs.isAttached = bool(state.attached_prim_path)
         db.outputs.attachedPrimPath = state.attached_prim_path
 
-        if not db.inputs.enabled:
-            OgnBubblegumPy._set_exec_outputs(db, event_attached, event_released)
-            return True
-
         stage = omni.usd.get_context().get_stage()
         if stage is None:
             db.log_error("No USD stage is available.")
@@ -119,8 +115,6 @@ class OgnBubblegumPy:
 
     @staticmethod
     def _set_exec_outputs(db, event_attached, event_released):
-        if hasattr(db.outputs, "execOut"):
-            db.outputs.execOut = og.ExecutionAttributeState.ENABLED
         if hasattr(db.outputs, "execAttached") and event_attached:
             db.outputs.execAttached = og.ExecutionAttributeState.ENABLED
         if hasattr(db.outputs, "execReleased") and event_released:

@@ -18,12 +18,6 @@
                 "type": "execution",
                 "description": "Execution trigger."
             },
-            "enabled": {
-                "type": "bool",
-                "uiName": "Enabled",
-                "description": "When false, the node forwards execution but does not change attachment state.",
-                "default": true
-            },
             "helperPrim": {
                 "type": "target",
                 "uiName": "Helper Prim",
@@ -49,10 +43,6 @@
             }
         },
         "outputs": {
-            "execOut": {
-                "type": "execution",
-                "description": "Execution trigger output."
-            },
             "execAttached": {
                 "type": "execution",
                 "description": "Execution trigger output fired only when a new prim is attached."
