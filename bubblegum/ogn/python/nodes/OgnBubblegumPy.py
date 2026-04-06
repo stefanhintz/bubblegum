@@ -118,13 +118,10 @@ class OgnBubblegumPy:
                 OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.touched_prim_paths.add(candidate_path)
                 state.attached_prim_path = candidate_prim.GetPath().pathString
-                restore_kinematic_enabled = None
                 if recovery_metadata is not None and "kinematic_enabled" in recovery_metadata:
-                    restore_kinematic_enabled = bool(recovery_metadata["kinematic_enabled"])
-                state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(
-                    candidate_prim,
-                    restore_kinematic_enabled,
-                )
+                    state.restore_kinematic_enabled = bool(recovery_metadata["kinematic_enabled"])
+                else:
+                    state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
                 if candidate_path not in state.original_kinematic_enabled:
                     state.original_kinematic_enabled[candidate_path] = state.restore_kinematic_enabled
                 OgnBubblegumPy._snap_attached_prim(helper_prim, candidate_prim, state.attached_to_helper)
@@ -322,7 +319,7 @@ class OgnBubblegumPy:
         return attached_world * helper_world.GetInverse()
 
     @staticmethod
-    def _set_kinematic_while_held(prim, restore_enabled=None):
+    def _set_kinematic_while_held(prim):
         if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
             return None
 
@@ -330,11 +327,9 @@ class OgnBubblegumPy:
             rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
             rigid_body_api.GetRigidBodyEnabledAttr().Set(True)
             kinematic_attr = rigid_body_api.GetKinematicEnabledAttr()
-            was_kinematic = restore_enabled
+            was_kinematic = kinematic_attr.Get()
             if was_kinematic is None:
-                was_kinematic = kinematic_attr.Get()
-                if was_kinematic is None:
-                    was_kinematic = False
+                was_kinematic = False
             kinematic_attr.Set(True)
             return was_kinematic
         except Exception:
