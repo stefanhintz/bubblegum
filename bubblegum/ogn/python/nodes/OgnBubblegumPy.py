@@ -102,12 +102,18 @@ class OgnBubblegumPy:
             )
             if candidate_prim is not None:
                 candidate_path = candidate_prim.GetPath().pathString
-                if candidate_path not in state.original_xform_states:
-                    state.original_xform_states[candidate_path] = OgnBubblegumPy._capture_xform_state(candidate_prim)
                 current_local = OgnBubblegumPy._get_local_transformation(candidate_prim)
-                if candidate_path not in state.original_local_transforms and current_local is not None:
-                    state.original_local_transforms[candidate_path] = Gf.Matrix4d(current_local)
-                OgnBubblegumPy._ensure_recovery_metadata(candidate_prim, current_local)
+                recovery_metadata = OgnBubblegumPy._get_recovery_metadata(candidate_prim)
+                if recovery_metadata is None:
+                    if candidate_path not in state.original_xform_states:
+                        state.original_xform_states[candidate_path] = OgnBubblegumPy._capture_xform_state(candidate_prim)
+                    if candidate_path not in state.original_local_transforms and current_local is not None:
+                        state.original_local_transforms[candidate_path] = Gf.Matrix4d(current_local)
+                    OgnBubblegumPy._ensure_recovery_metadata(candidate_prim, current_local)
+                else:
+                    original_local = recovery_metadata.get("original_local_transform")
+                    if candidate_path not in state.original_local_transforms and original_local is not None:
+                        state.original_local_transforms[candidate_path] = Gf.Matrix4d(original_local)
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.touched_prim_paths.add(candidate_path)
@@ -407,7 +413,7 @@ class OgnBubblegumPy:
         if prim is None or not prim.IsValid():
             return
 
-        existing = prim.GetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY)
+        existing = OgnBubblegumPy._get_recovery_metadata(prim)
         if existing:
             return
 
@@ -421,6 +427,14 @@ class OgnBubblegumPy:
             metadata["kinematic_enabled"] = bool(rigid_body_api.GetKinematicEnabledAttr().Get())
 
         prim.SetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY, metadata)
+
+    @staticmethod
+    def _get_recovery_metadata(prim):
+        if prim is None or not prim.IsValid():
+            return None
+
+        metadata = prim.GetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY)
+        return metadata if metadata else None
 
     @staticmethod
     def _clear_recovery_metadata(prim):
