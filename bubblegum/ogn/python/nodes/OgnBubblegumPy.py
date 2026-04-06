@@ -474,7 +474,7 @@ class OgnBubblegumPy:
 
         sticky_op = OgnBubblegumPy._get_or_create_sticky_transform_op(xformable)
         base_local_matrix = Gf.Matrix4d(base_local) if base_local is not None else Gf.Matrix4d(1.0)
-        sticky_op.Set(base_local_matrix.GetInverse() * target_local)
+        sticky_op.Set(target_local * base_local_matrix.GetInverse())
 
     @staticmethod
     def _get_local_transformation(prim):
@@ -524,7 +524,7 @@ class OgnBubblegumPy:
         if sticky_local is None:
             return current_local_matrix
 
-        return current_local_matrix * Gf.Matrix4d(sticky_local).GetInverse()
+        return Gf.Matrix4d(sticky_local).GetInverse() * current_local_matrix
 
     @staticmethod
     def _remove_sticky_transform_op(xformable):
