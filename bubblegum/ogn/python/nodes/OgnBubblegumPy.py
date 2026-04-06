@@ -120,6 +120,7 @@ class OgnBubblegumPy:
                 state.attached_prim_path = candidate_prim.GetPath().pathString
                 if recovery_metadata is not None and "kinematic_enabled" in recovery_metadata:
                     state.restore_kinematic_enabled = bool(recovery_metadata["kinematic_enabled"])
+                    OgnBubblegumPy._set_kinematic_enabled(candidate_prim, True)
                 else:
                     state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
                 if candidate_path not in state.original_kinematic_enabled:
@@ -324,9 +325,7 @@ class OgnBubblegumPy:
             return None
 
         try:
-            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
-            rigid_body_api.GetRigidBodyEnabledAttr().Set(True)
-            kinematic_attr = rigid_body_api.GetKinematicEnabledAttr()
+            kinematic_attr = UsdPhysics.RigidBodyAPI(prim).GetKinematicEnabledAttr()
             was_kinematic = kinematic_attr.Get()
             if was_kinematic is None:
                 was_kinematic = False
@@ -334,6 +333,16 @@ class OgnBubblegumPy:
             return was_kinematic
         except Exception:
             return None
+
+    @staticmethod
+    def _set_kinematic_enabled(prim, enabled):
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return
+
+        try:
+            UsdPhysics.RigidBodyAPI(prim).GetKinematicEnabledAttr().Set(enabled)
+        except Exception:
+            pass
 
     @staticmethod
     def _reset_rigid_body_after_release(prim, enabled):
