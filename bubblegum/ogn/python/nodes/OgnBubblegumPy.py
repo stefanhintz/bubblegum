@@ -114,6 +114,7 @@ class OgnBubblegumPy:
                     original_local = recovery_metadata.get("original_local_transform")
                     if candidate_path not in state.original_local_transforms and original_local is not None:
                         state.original_local_transforms[candidate_path] = Gf.Matrix4d(original_local)
+                OgnBubblegumPy._increment_active_holders(candidate_prim)
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.touched_prim_paths.add(candidate_path)
@@ -174,13 +175,15 @@ class OgnBubblegumPy:
         if state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
+                remaining_holders = OgnBubblegumPy._decrement_active_holders(released_prim)
                 if restore_transform:
                     OgnBubblegumPy._restore_original_transform_state(
                         released_prim,
                         state.original_xform_states.get(state.attached_prim_path),
                         state.original_local_transforms.get(state.attached_prim_path),
                     )
-                OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
+                elif remaining_holders <= 0:
+                    OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
@@ -429,6 +432,7 @@ class OgnBubblegumPy:
             rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
             metadata["rigid_body_enabled"] = bool(rigid_body_api.GetRigidBodyEnabledAttr().Get())
             metadata["kinematic_enabled"] = bool(rigid_body_api.GetKinematicEnabledAttr().Get())
+        metadata["active_holders"] = 0
 
         prim.SetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY, metadata)
 
@@ -439,6 +443,34 @@ class OgnBubblegumPy:
 
         metadata = prim.GetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY)
         return metadata if metadata else None
+
+    @staticmethod
+    def _set_recovery_metadata(prim, metadata):
+        if prim is None or not prim.IsValid():
+            return
+        prim.SetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY, metadata)
+
+    @staticmethod
+    def _increment_active_holders(prim):
+        metadata = OgnBubblegumPy._get_recovery_metadata(prim)
+        if metadata is None:
+            return 0
+
+        holder_count = int(metadata.get("active_holders", 0)) + 1
+        metadata["active_holders"] = holder_count
+        OgnBubblegumPy._set_recovery_metadata(prim, metadata)
+        return holder_count
+
+    @staticmethod
+    def _decrement_active_holders(prim):
+        metadata = OgnBubblegumPy._get_recovery_metadata(prim)
+        if metadata is None:
+            return 0
+
+        holder_count = max(0, int(metadata.get("active_holders", 0)) - 1)
+        metadata["active_holders"] = holder_count
+        OgnBubblegumPy._set_recovery_metadata(prim, metadata)
+        return holder_count
 
     @staticmethod
     def _clear_recovery_metadata(prim):
