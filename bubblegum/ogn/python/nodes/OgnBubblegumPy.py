@@ -79,6 +79,16 @@ class OgnBubblegumPy:
             return False
 
         if not db.inputs.stick and state.attached_prim_path:
+            attached_prim = stage.GetPrimAtPath(state.attached_prim_path)
+            if not attached_prim.IsValid():
+                db.log_error(f"Attached prim no longer exists: {state.attached_prim_path}")
+                return False
+            OgnBubblegumPy._snap_attached_prim(
+                helper_prim,
+                attached_prim,
+                state.attached_to_helper,
+                state.attached_base_local,
+            )
             OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=False)
             event_released = True
 
