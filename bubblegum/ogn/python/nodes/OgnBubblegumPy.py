@@ -7,13 +7,12 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 
 class OgnBubblegumPy:
-    STICKY_OP_SUFFIX = "bubblegumSticky"
+    RECOVERY_KEY = "bubblegumRecovery"
 
     class _State:
         def __init__(self):
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
-            self.attached_base_local = None
             self.restore_kinematic_enabled = None
             self.original_local_transforms = {}
             self.original_xform_states = {}
@@ -83,12 +82,7 @@ class OgnBubblegumPy:
             if not attached_prim.IsValid():
                 db.log_error(f"Attached prim no longer exists: {state.attached_prim_path}")
                 return False
-            OgnBubblegumPy._snap_attached_prim(
-                helper_prim,
-                attached_prim,
-                state.attached_to_helper,
-                state.attached_base_local,
-            )
+            OgnBubblegumPy._snap_attached_prim(helper_prim, attached_prim, state.attached_to_helper)
             OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=False)
             event_released = True
 
@@ -97,12 +91,7 @@ class OgnBubblegumPy:
             if not attached_prim.IsValid():
                 db.log_error(f"Attached prim no longer exists: {state.attached_prim_path}")
                 return False
-            OgnBubblegumPy._snap_attached_prim(
-                helper_prim,
-                attached_prim,
-                state.attached_to_helper,
-                state.attached_base_local,
-            )
+            OgnBubblegumPy._snap_attached_prim(helper_prim, attached_prim, state.attached_to_helper)
         elif db.inputs.stick:
             candidate_prim = OgnBubblegumPy._find_candidate_prim(
                 db=db,
@@ -118,8 +107,7 @@ class OgnBubblegumPy:
                 current_local = OgnBubblegumPy._get_local_transformation(candidate_prim)
                 if candidate_path not in state.original_local_transforms and current_local is not None:
                     state.original_local_transforms[candidate_path] = Gf.Matrix4d(current_local)
-                existing_sticky = OgnBubblegumPy._get_sticky_transform_value(candidate_prim)
-                state.attached_base_local = OgnBubblegumPy._compute_base_local(current_local, existing_sticky)
+                OgnBubblegumPy._ensure_recovery_metadata(candidate_prim, current_local)
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.touched_prim_paths.add(candidate_path)
@@ -127,12 +115,7 @@ class OgnBubblegumPy:
                 state.restore_kinematic_enabled = OgnBubblegumPy._set_kinematic_while_held(candidate_prim)
                 if candidate_path not in state.original_kinematic_enabled:
                     state.original_kinematic_enabled[candidate_path] = state.restore_kinematic_enabled
-                OgnBubblegumPy._snap_attached_prim(
-                    helper_prim,
-                    candidate_prim,
-                    state.attached_to_helper,
-                    state.attached_base_local,
-                )
+                OgnBubblegumPy._snap_attached_prim(helper_prim, candidate_prim, state.attached_to_helper)
                 event_attached = True
 
         db.outputs.isAttached = bool(state.attached_prim_path)
@@ -191,7 +174,6 @@ class OgnBubblegumPy:
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
-        state.attached_base_local = None
         state.restore_kinematic_enabled = None
 
     @staticmethod
@@ -211,10 +193,10 @@ class OgnBubblegumPy:
             )
 
             OgnBubblegumPy._reset_rigid_body_after_release(prim, state.original_kinematic_enabled.get(prim_path))
+            OgnBubblegumPy._clear_recovery_metadata(prim)
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
-        state.attached_base_local = None
         state.restore_kinematic_enabled = None
         state.touched_prim_paths.clear()
         state.original_local_transforms.clear()
@@ -394,8 +376,13 @@ class OgnBubblegumPy:
         if not xformable:
             return None
 
-        OgnBubblegumPy._get_or_create_sticky_transform_op(xformable)
-        return OgnBubblegumPy._get_local_transformation(prim)
+        current_local = OgnBubblegumPy._get_local_transformation(prim)
+        if current_local is None:
+            return None
+
+        transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, current_local)
+        transform_op.Set(current_local)
+        return current_local
 
     @staticmethod
     def _restore_original_transform_state(prim, xform_state, local_transform):
@@ -414,6 +401,59 @@ class OgnBubblegumPy:
 
         transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, local_transform)
         transform_op.Set(local_transform)
+
+    @staticmethod
+    def _ensure_recovery_metadata(prim, local_transform):
+        if prim is None or not prim.IsValid():
+            return
+
+        existing = prim.GetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY)
+        if existing:
+            return
+
+        metadata = {}
+        if local_transform is not None:
+            metadata["original_local_transform"] = Gf.Matrix4d(local_transform)
+
+        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+            metadata["rigid_body_enabled"] = bool(rigid_body_api.GetRigidBodyEnabledAttr().Get())
+            metadata["kinematic_enabled"] = bool(rigid_body_api.GetKinematicEnabledAttr().Get())
+
+        prim.SetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY, metadata)
+
+    @staticmethod
+    def _clear_recovery_metadata(prim):
+        if prim is None or not prim.IsValid():
+            return
+
+        try:
+            prim.ClearCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY)
+        except Exception:
+            pass
+
+    @staticmethod
+    def restore_stage_from_metadata(stage):
+        if stage is None:
+            return
+
+        for prim in stage.Traverse():
+            metadata = prim.GetCustomDataByKey(OgnBubblegumPy.RECOVERY_KEY)
+            if not metadata:
+                continue
+
+            local_transform = metadata.get("original_local_transform")
+            if local_transform is not None:
+                OgnBubblegumPy._restore_local_transform(prim, Gf.Matrix4d(local_transform))
+
+            if prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+                if "rigid_body_enabled" in metadata:
+                    rigid_body_api.GetRigidBodyEnabledAttr().Set(bool(metadata["rigid_body_enabled"]))
+                if "kinematic_enabled" in metadata:
+                    rigid_body_api.GetKinematicEnabledAttr().Set(bool(metadata["kinematic_enabled"]))
+
+            OgnBubblegumPy._clear_recovery_metadata(prim)
 
     @staticmethod
     def _capture_xform_state(prim):
@@ -470,11 +510,14 @@ class OgnBubblegumPy:
         xformable.SetXformOpOrder(restored_ops, resetXformStack=xform_state["reset_stack"])
 
     @staticmethod
-    def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper, base_local):
+    def _snap_attached_prim(helper_prim, attached_prim, attached_to_helper):
         helper_world = omni.usd.get_world_transform_matrix(helper_prim)
         target_world = attached_to_helper * helper_world
 
         xform_cache = UsdGeom.XformCache(Usd.TimeCode.Default())
+        current_local = xform_cache.GetLocalTransformation(attached_prim)
+        if isinstance(current_local, tuple):
+            current_local = current_local[0]
         parent_world = xform_cache.GetParentToWorldTransform(attached_prim)
         target_local = target_world * parent_world.GetInverse()
 
@@ -482,9 +525,8 @@ class OgnBubblegumPy:
         if not xformable:
             return
 
-        sticky_op = OgnBubblegumPy._get_or_create_sticky_transform_op(xformable)
-        base_local_matrix = Gf.Matrix4d(base_local) if base_local is not None else Gf.Matrix4d(1.0)
-        sticky_op.Set(target_local * base_local_matrix.GetInverse())
+        transform_op = OgnBubblegumPy._get_or_create_transform_op(xformable, current_local)
+        transform_op.Set(target_local)
 
     @staticmethod
     def _get_local_transformation(prim):
@@ -493,72 +535,6 @@ class OgnBubblegumPy:
         if isinstance(local_transform, tuple):
             local_transform = local_transform[0]
         return local_transform
-
-    @staticmethod
-    def _get_or_create_sticky_transform_op(xformable):
-        ordered_ops = list(xformable.GetOrderedXformOps())
-        for op in ordered_ops:
-            if OgnBubblegumPy._is_sticky_transform_op(op):
-                return op
-
-        sticky_op = xformable.AddTransformOp(
-            precision=UsdGeom.XformOp.PrecisionDouble,
-            opSuffix=OgnBubblegumPy.STICKY_OP_SUFFIX,
-        )
-        reset_stack = False
-        if hasattr(xformable, "GetResetXformStack"):
-            reset_stack = bool(xformable.GetResetXformStack())
-
-        ordered_without_sticky = [op for op in ordered_ops if not OgnBubblegumPy._is_sticky_transform_op(op)]
-        xformable.SetXformOpOrder(ordered_without_sticky + [sticky_op], resetXformStack=reset_stack)
-        return sticky_op
-
-    @staticmethod
-    def _get_sticky_transform_value(prim):
-        xformable = UsdGeom.Xformable(prim)
-        if not xformable:
-            return None
-
-        for op in xformable.GetOrderedXformOps():
-            if OgnBubblegumPy._is_sticky_transform_op(op):
-                value = op.Get()
-                return Gf.Matrix4d(value) if value is not None else Gf.Matrix4d(1.0)
-        return None
-
-    @staticmethod
-    def _compute_base_local(current_local, sticky_local):
-        if current_local is None:
-            return None
-
-        current_local_matrix = Gf.Matrix4d(current_local)
-        if sticky_local is None:
-            return current_local_matrix
-
-        return Gf.Matrix4d(sticky_local).GetInverse() * current_local_matrix
-
-    @staticmethod
-    def _remove_sticky_transform_op(xformable):
-        ordered_ops = list(xformable.GetOrderedXformOps())
-        sticky_ops = [op for op in ordered_ops if OgnBubblegumPy._is_sticky_transform_op(op)]
-        if not sticky_ops:
-            return
-
-        reset_stack = False
-        if hasattr(xformable, "GetResetXformStack"):
-            reset_stack = bool(xformable.GetResetXformStack())
-
-        ordered_without_sticky = [op for op in ordered_ops if not OgnBubblegumPy._is_sticky_transform_op(op)]
-        xformable.SetXformOpOrder(ordered_without_sticky, resetXformStack=reset_stack)
-
-        prim = xformable.GetPrim()
-        for op in sticky_ops:
-            prim.RemoveProperty(str(op.GetName()))
-
-    @staticmethod
-    def _is_sticky_transform_op(op):
-        if op.GetOpType() != UsdGeom.XformOp.TypeTransform or op.IsInverseOp():
-            return False
-        return str(op.GetName()) == f"xformOp:transform:{OgnBubblegumPy.STICKY_OP_SUFFIX}"
 
     @staticmethod
     def _get_or_create_transform_op(xformable, current_local):
