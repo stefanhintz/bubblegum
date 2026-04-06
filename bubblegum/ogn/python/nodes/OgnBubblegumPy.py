@@ -339,18 +339,10 @@ class OgnBubblegumPy:
 
         try:
             rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
-            rigid_body_enabled_attr = rigid_body_api.GetRigidBodyEnabledAttr()
             kinematic_attr = rigid_body_api.GetKinematicEnabledAttr()
 
-            # Explicit reset sequence:
-            # 1. disable rigid body
-            # 2. enable kinematic
-            # 3. restore requested kinematic state
-            # 4. re-enable rigid body
-            rigid_body_enabled_attr.Set(False)
-            kinematic_attr.Set(True)
+            # Keep the rigid body alive and only hand off between kinematic and dynamic modes.
             kinematic_attr.Set(enabled)
-            rigid_body_enabled_attr.Set(True)
 
             if not enabled:
                 OgnBubblegumPy._wake_rigid_body(prim)
