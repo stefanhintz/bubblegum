@@ -108,7 +108,8 @@ class OgnBubblegumPy:
                 current_local = OgnBubblegumPy._get_local_transformation(candidate_prim)
                 if candidate_path not in state.original_local_transforms and current_local is not None:
                     state.original_local_transforms[candidate_path] = Gf.Matrix4d(current_local)
-                state.attached_base_local = Gf.Matrix4d(current_local) if current_local is not None else None
+                existing_sticky = OgnBubblegumPy._get_sticky_transform_value(candidate_prim)
+                state.attached_base_local = OgnBubblegumPy._compute_base_local(current_local, existing_sticky)
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.touched_prim_paths.add(candidate_path)
@@ -383,8 +384,7 @@ class OgnBubblegumPy:
         if not xformable:
             return None
 
-        sticky_op = OgnBubblegumPy._get_or_create_sticky_transform_op(xformable)
-        sticky_op.Set(Gf.Matrix4d(1.0))
+        OgnBubblegumPy._get_or_create_sticky_transform_op(xformable)
         return OgnBubblegumPy._get_local_transformation(prim)
 
     @staticmethod
@@ -502,6 +502,29 @@ class OgnBubblegumPy:
         ordered_without_sticky = [op for op in ordered_ops if not OgnBubblegumPy._is_sticky_transform_op(op)]
         xformable.SetXformOpOrder(ordered_without_sticky + [sticky_op], resetXformStack=reset_stack)
         return sticky_op
+
+    @staticmethod
+    def _get_sticky_transform_value(prim):
+        xformable = UsdGeom.Xformable(prim)
+        if not xformable:
+            return None
+
+        for op in xformable.GetOrderedXformOps():
+            if OgnBubblegumPy._is_sticky_transform_op(op):
+                value = op.Get()
+                return Gf.Matrix4d(value) if value is not None else Gf.Matrix4d(1.0)
+        return None
+
+    @staticmethod
+    def _compute_base_local(current_local, sticky_local):
+        if current_local is None:
+            return None
+
+        current_local_matrix = Gf.Matrix4d(current_local)
+        if sticky_local is None:
+            return current_local_matrix
+
+        return current_local_matrix * Gf.Matrix4d(sticky_local).GetInverse()
 
     @staticmethod
     def _remove_sticky_transform_op(xformable):
