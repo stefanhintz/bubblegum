@@ -1,0 +1,125 @@
+{
+    "AgvWaypointDriver": {
+        "version": 1,
+        "language": "python",
+        "icon": "icons/icon.svg",
+        "uiName": "AGV Waypoint Driver",
+        "description": [
+            "Drive an AGV prim through waypoint Xforms, including optional waits, corner bending, and reverse-at-endpoints mode.",
+            "Waypoint children are read in lexicographic order from the path root. Name tokens support _waitMS####, _bendingCM###, and _reverse on both endpoints."
+        ],
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger. Connect this to On Physics Step."
+            },
+            "agvPrim": {
+                "type": "target",
+                "uiName": "AGV Prim",
+                "description": "AGV Xform prim that is moved each evaluation."
+            },
+            "pathRootPrim": {
+                "type": "target",
+                "uiName": "Path Root Prim",
+                "description": "Root prim whose child Xforms define the waypoint path in lexicographic order."
+            },
+            "deltaTime": {
+                "type": "double",
+                "uiName": "Delta Time",
+                "description": "Physics step delta time in seconds.",
+                "default": 0.0166667
+            },
+            "targetSpeedMps": {
+                "type": "double",
+                "uiName": "Target Speed (m/s)",
+                "description": "Cruising speed in meters per second.",
+                "default": 1.2
+            },
+            "maxAccelMps2": {
+                "type": "double",
+                "uiName": "Max Accel (m/s^2)",
+                "description": "Maximum linear acceleration in meters per second squared.",
+                "default": 0.8
+            },
+            "maxYawRateRps": {
+                "type": "double",
+                "uiName": "Max Yaw Rate (rad/s)",
+                "description": "Maximum yaw rate in radians per second.",
+                "default": 1.5
+            },
+            "maxYawAccelRps2": {
+                "type": "double",
+                "uiName": "Max Yaw Accel (rad/s^2)",
+                "description": "Maximum yaw acceleration in radians per second squared.",
+                "default": 3.0
+            },
+            "positionToleranceM": {
+                "type": "double",
+                "uiName": "Position Tolerance (m)",
+                "description": "Planar position tolerance for waypoint arrival.",
+                "default": 0.03
+            },
+            "yawToleranceDeg": {
+                "type": "double",
+                "uiName": "Yaw Tolerance (deg)",
+                "description": "Yaw error tolerance in degrees before linear motion is stopped.",
+                "default": 2.0
+            },
+            "lookaheadM": {
+                "type": "double",
+                "uiName": "Lookahead (m)",
+                "description": "Planar lookahead distance for heading control.",
+                "default": 0.15
+            }
+        },
+        "outputs": {
+            "isRouteValid": {
+                "type": "bool",
+                "uiName": "Is Route Valid",
+                "description": "True when at least two waypoint Xforms were found under the path root.",
+                "default": false
+            },
+            "isWaiting": {
+                "type": "bool",
+                "uiName": "Is Waiting",
+                "description": "True while waiting at a waypoint before continuing.",
+                "default": false
+            },
+            "isStopped": {
+                "type": "bool",
+                "uiName": "Is Stopped",
+                "description": "True after reaching an endpoint in non-reverse mode.",
+                "default": false
+            },
+            "reverseMode": {
+                "type": "bool",
+                "uiName": "Reverse Mode",
+                "description": "True when both the first and last waypoint names include _reverse.",
+                "default": false
+            },
+            "currentWaypointIndex": {
+                "type": "int",
+                "uiName": "Current Waypoint Index",
+                "description": "Current active waypoint index in the sorted waypoint list.",
+                "default": 0
+            },
+            "currentWaypointName": {
+                "type": "token",
+                "uiName": "Current Waypoint Name",
+                "description": "Current active waypoint name.",
+                "default": ""
+            },
+            "waypointCount": {
+                "type": "int",
+                "uiName": "Waypoint Count",
+                "description": "Number of valid waypoint Xforms under the path root.",
+                "default": 0
+            }
+        }
+    }
+}

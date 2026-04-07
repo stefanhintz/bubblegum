@@ -3,6 +3,7 @@
 This extension adds one OmniGraph node for Isaac Sim:
 
 - `Bubblegum Sticky Pick`
+- `AGV Waypoint Driver`
 
 The node implements a simple sticky-gripper behavior:
 
@@ -40,3 +41,55 @@ Notes:
 - invalid prim paths fail fast
 
 To enable this extension, go to `Window > Extensions` and enable `bubblegum`.
+
+## AGV Waypoint Driver
+
+The AGV node turns the script-editor waypoint follower into a stateful OmniGraph node.
+
+Scene expectations:
+
+- an AGV Xform prim to move
+- a path root prim whose child Xforms are waypoints
+- waypoint children are traversed in lexicographic order, so use names like `wp_001`, `wp_002`, ...
+
+Waypoint name tokens:
+
+- `_waitMS####`: wait at the waypoint in milliseconds
+- `_bendingCM###`: round a corner with the given radius in centimeters when the corner geometry allows it
+- `_reverse`: enable reverse-at-endpoints mode only when present on both the first and last waypoint
+
+Typical wiring:
+
+- connect `On Physics Step.execOut` to `AGV Waypoint Driver.execIn`
+- connect physics delta time to `deltaTime`
+- set `agvPrim`
+- set `pathRootPrim`
+
+Main inputs:
+
+- `agvPrim`
+- `pathRootPrim`
+- `deltaTime`
+- `targetSpeedMps`
+- `maxAccelMps2`
+- `maxYawRateRps`
+- `maxYawAccelRps2`
+- `positionToleranceM`
+- `yawToleranceDeg`
+- `lookaheadM`
+
+Main outputs:
+
+- `isRouteValid`
+- `isWaiting`
+- `isStopped`
+- `reverseMode`
+- `currentWaypointIndex`
+- `currentWaypointName`
+- `waypointCount`
+
+Notes:
+
+- this first pass expects fixed waypoint Xforms and no live obstacle handling
+- the AGV is moved kinematically by updating its translate/orient ops each evaluation
+- when reverse mode is disabled, the node stays stopped at the endpoint until the timeline is restarted or the route changes
