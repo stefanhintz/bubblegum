@@ -23,10 +23,28 @@
                 "uiName": "AGV Prim",
                 "description": "AGV Xform prim that is moved each evaluation."
             },
-            "pathRootPrim": {
+            "pathRoots": {
                 "type": "target",
-                "uiName": "Path Root Prim",
-                "description": "Root prim whose child Xforms define the waypoint path in lexicographic order."
+                "uiName": "Path Roots",
+                "description": "One or more path root prims. Each root's child Xforms define one selectable waypoint path."
+            },
+            "activePathIndex": {
+                "type": "int",
+                "uiName": "Active Path Index",
+                "description": "Index into the pathRoots input. Out-of-range values are clamped.",
+                "default": 0
+            },
+            "run": {
+                "type": "bool",
+                "uiName": "Run",
+                "description": "When true, the AGV advances along the active path. When false, it holds position and preserves internal state.",
+                "default": true
+            },
+            "reset": {
+                "type": "bool",
+                "uiName": "Reset",
+                "description": "Pulse true to reset route progress, wait state, bend state, and endpoint stop state.",
+                "default": false
             },
             "deltaTime": {
                 "type": "double",
@@ -101,6 +119,18 @@
                 "uiName": "Reverse Mode",
                 "description": "True when both the first and last waypoint names include _reverse.",
                 "default": false
+            },
+            "isRunning": {
+                "type": "bool",
+                "uiName": "Is Running",
+                "description": "True when the node is currently allowed to advance along the path.",
+                "default": false
+            },
+            "activePathName": {
+                "type": "token",
+                "uiName": "Active Path Name",
+                "description": "Name of the active path root prim.",
+                "default": ""
             },
             "currentWaypointIndex": {
                 "type": "int",

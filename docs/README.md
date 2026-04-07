@@ -63,12 +63,18 @@ Typical wiring:
 - connect `On Physics Step.execOut` to `AGV Waypoint Driver.execIn`
 - connect physics delta time to `deltaTime`
 - set `agvPrim`
-- set `pathRootPrim`
+- set one or more `pathRoots`
+- choose the route with `activePathIndex`
+- set `run = true` to move
+- pulse `reset = true` to restart the selected route from the beginning
 
 Main inputs:
 
 - `agvPrim`
-- `pathRootPrim`
+- `pathRoots`
+- `activePathIndex`
+- `run`
+- `reset`
 - `deltaTime`
 - `targetSpeedMps`
 - `maxAccelMps2`
@@ -83,7 +89,9 @@ Main outputs:
 - `isRouteValid`
 - `isWaiting`
 - `isStopped`
+- `isRunning`
 - `reverseMode`
+- `activePathName`
 - `currentWaypointIndex`
 - `currentWaypointName`
 - `waypointCount`

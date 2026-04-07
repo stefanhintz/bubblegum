@@ -25,6 +25,7 @@ class OgnAgvWaypointDriver:
             self.bend_state = None
             self.route_signature = None
             self.stopped = False
+            self.last_active_path = None
 
         def _subscribe_timeline_stop(self):
             timeline = omni.timeline.get_timeline_interface()
@@ -54,15 +55,15 @@ class OgnAgvWaypointDriver:
             return False
 
         agv_paths = OgnAgvWaypointDriver._extract_target_paths(db.inputs.agvPrim)
-        path_root_paths = OgnAgvWaypointDriver._extract_target_paths(db.inputs.pathRootPrim)
+        path_root_paths = OgnAgvWaypointDriver._extract_target_paths(db.inputs.pathRoots)
         agv_path = agv_paths[0] if agv_paths else ""
-        path_root_path = path_root_paths[0] if path_root_paths else ""
+        path_root_path = OgnAgvWaypointDriver._select_active_path(path_root_paths, int(db.inputs.activePathIndex))
 
         if not agv_path:
             db.log_error("inputs:agvPrim is required.")
             return False
         if not path_root_path:
-            db.log_error("inputs:pathRootPrim is required.")
+            db.log_error("inputs:pathRoots must contain at least one valid path root.")
             return False
 
         agv_prim = stage.GetPrimAtPath(agv_path)
@@ -75,9 +76,13 @@ class OgnAgvWaypointDriver:
             db.log_error(f"AGV prim is not Xformable: {agv_path}")
             return False
 
+        if bool(db.inputs.reset):
+            state.reset()
+
         waypoints = OgnAgvWaypointDriver._read_waypoints(stage, path_root_path)
         db.outputs.waypointCount = len(waypoints)
         db.outputs.isRouteValid = len(waypoints) >= 2
+        db.outputs.activePathName = stage.GetPrimAtPath(path_root_path).GetName() if path_root_path else ""
 
         if len(waypoints) < 2:
             state.reset()
@@ -86,13 +91,19 @@ class OgnAgvWaypointDriver:
         reverse_mode = bool(waypoints[0]["reverse"] and waypoints[-1]["reverse"])
         db.outputs.reverseMode = reverse_mode
 
-        route_signature = tuple(wp["name"] for wp in waypoints)
-        if state.route_signature != route_signature:
+        route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
+        if state.route_signature != route_signature or state.last_active_path != path_root_path:
             state.reset()
             state.route_signature = route_signature
+            state.last_active_path = path_root_path
 
         timeline = omni.timeline.get_timeline_interface()
         if timeline is not None and not timeline.is_playing():
+            return True
+
+        db.outputs.isRunning = bool(db.inputs.run) and not state.stopped
+        if not bool(db.inputs.run):
+            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
 
         dt = max(0.0, float(db.inputs.deltaTime))
@@ -299,7 +310,9 @@ class OgnAgvWaypointDriver:
         db.outputs.isRouteValid = False
         db.outputs.isWaiting = False
         db.outputs.isStopped = False
+        db.outputs.isRunning = False
         db.outputs.reverseMode = False
+        db.outputs.activePathName = ""
         db.outputs.currentWaypointIndex = 0
         db.outputs.currentWaypointName = ""
         db.outputs.waypointCount = 0
@@ -336,6 +349,14 @@ class OgnAgvWaypointDriver:
         if not value or value in {"[]", "None"}:
             return []
         return [value]
+
+    @staticmethod
+    def _select_active_path(path_root_paths, active_path_index):
+        if not path_root_paths:
+            return ""
+
+        clamped_index = min(max(int(active_path_index), 0), len(path_root_paths) - 1)
+        return path_root_paths[clamped_index]
 
     @staticmethod
     def _wrap_pi(angle):
