@@ -40,11 +40,10 @@
                 "description": "When true, the AGV advances along the active path. When false, it holds position and preserves internal state.",
                 "default": true
             },
-            "reset": {
-                "type": "bool",
+            "execReset": {
+                "type": "execution",
                 "uiName": "Reset",
-                "description": "Pulse true to reset route progress, wait state, bend state, and endpoint stop state.",
-                "default": false
+                "description": "Execution trigger that resets route state and snaps the AGV to the first waypoint of the active path."
             },
             "deltaTime": {
                 "type": "double",

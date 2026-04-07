@@ -66,7 +66,7 @@ Typical wiring:
 - set one or more `pathRoots`
 - choose the route with `activePathIndex`
 - set `run = true` to move
-- pulse `reset = true` to restart the selected route from the beginning
+- trigger `execReset` to snap the AGV to the first waypoint of the active route and clear route state
 
 Main inputs:
 
@@ -74,7 +74,7 @@ Main inputs:
 - `pathRoots`
 - `activePathIndex`
 - `run`
-- `reset`
+- `execReset`
 - `deltaTime`
 - `targetSpeedMps`
 - `maxAccelMps2`

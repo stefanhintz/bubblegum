@@ -76,9 +76,6 @@ class OgnAgvWaypointDriver:
             db.log_error(f"AGV prim is not Xformable: {agv_path}")
             return False
 
-        if bool(db.inputs.reset):
-            state.reset()
-
         waypoints = OgnAgvWaypointDriver._read_waypoints(stage, path_root_path)
         db.outputs.waypointCount = len(waypoints)
         db.outputs.isRouteValid = len(waypoints) >= 2
@@ -86,6 +83,12 @@ class OgnAgvWaypointDriver:
 
         if len(waypoints) < 2:
             state.reset()
+            return True
+
+        if OgnAgvWaypointDriver._execution_requested(db.inputs, "execReset"):
+            state.reset()
+            OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
+            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
 
         reverse_mode = bool(waypoints[0]["reverse"] and waypoints[-1]["reverse"])
@@ -331,6 +334,13 @@ class OgnAgvWaypointDriver:
         db.outputs.currentWaypointName = waypoints[idx]["name"]
 
     @staticmethod
+    def _execution_requested(inputs, attr_name):
+        value = getattr(inputs, attr_name, None)
+        if value is None:
+            return False
+        return value == og.ExecutionAttributeState.ENABLED
+
+    @staticmethod
     def _extract_target_paths(target_value):
         if target_value is None:
             return []
@@ -438,6 +448,26 @@ class OgnAgvWaypointDriver:
 
         translate_op.Set(pos)
         orient_op.Set(quat)
+
+    @staticmethod
+    def _snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, direction):
+        target_pos = waypoints[0]["pos"]
+        target_yaw = 0.0
+
+        if len(waypoints) >= 2:
+            next_idx = min(max(0 + direction, 0), len(waypoints) - 1)
+            next_pos = waypoints[next_idx]["pos"]
+            delta = next_pos - target_pos
+            if float(np.linalg.norm(delta[:2])) > 1e-6:
+                target_yaw = math.atan2(delta[1], delta[0])
+            else:
+                _pos, quat = OgnAgvWaypointDriver._get_world_pose(agv_prim)
+                target_yaw = OgnAgvWaypointDriver._yaw_from_quat(quat)
+        else:
+            _pos, quat = OgnAgvWaypointDriver._get_world_pose(agv_prim)
+            target_yaw = OgnAgvWaypointDriver._yaw_from_quat(quat)
+
+        OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, target_pos, target_yaw)
 
     @staticmethod
     def _read_waypoints(stage, path_root_path):
