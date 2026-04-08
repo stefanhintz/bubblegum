@@ -4,6 +4,7 @@ This extension adds one OmniGraph node for Isaac Sim:
 
 - `Bubblegum Sticky Pick`
 - `AGV Waypoint Driver`
+- `Prim Reset`
 
 The node implements a simple sticky-gripper behavior:
 
@@ -41,6 +42,34 @@ Notes:
 - invalid prim paths fail fast
 
 To enable this extension, go to `Window > Extensions` and enable `bubblegum`.
+
+## Prim Reset
+
+The prim reset node captures one prim's initial state and restores it on demand during simulation.
+
+Typical wiring:
+
+- connect any tick or control execution to `execIn`
+- set `prim`
+- trigger `execReset` whenever you want to restore that prim
+
+Behavior:
+
+- the first time the node sees a valid `prim`, it captures the prim path, local transform, and xform op stack
+- if the prim has rigid-body API, it also captures the initial rigid-body enabled and kinematic-enabled flags
+- on `execReset`, it restores the captured transform state and attempts to zero rigid-body linear and angular velocities
+
+Inputs:
+
+- `execIn`
+- `prim`
+- `execReset`
+
+Outputs:
+
+- `execResetDone`
+- `isCaptured`
+- `trackedPrimPath`
 
 ## AGV Waypoint Driver
 

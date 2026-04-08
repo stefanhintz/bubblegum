@@ -1,0 +1,51 @@
+{
+    "PrimReset": {
+        "version": 1,
+        "language": "python",
+        "icon": "icons/icon.svg",
+        "uiName": "Prim Reset",
+        "description": [
+            "Capture a prim's initial transform and physics state, then restore that state on demand during simulation.",
+            "On reset execution, the prim is restored to its captured transform, rigid-body enable/kinematic flags are restored, and linear/angular velocities are set to zero."
+        ],
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger used to keep the node state in sync with the selected prim."
+            },
+            "prim": {
+                "type": "target",
+                "uiName": "Prim",
+                "description": "Prim whose initial state is captured and later restored."
+            },
+            "execReset": {
+                "type": "execution",
+                "uiName": "Reset",
+                "description": "Execution trigger that restores the captured state and zeros rigid-body velocities."
+            }
+        },
+        "outputs": {
+            "execResetDone": {
+                "type": "execution",
+                "description": "Execution trigger output fired when the reset operation completes successfully."
+            },
+            "isCaptured": {
+                "type": "bool",
+                "uiName": "Is Captured",
+                "description": "True when the node has captured an initial state for the selected prim.",
+                "default": false
+            },
+            "trackedPrimPath": {
+                "type": "token",
+                "uiName": "Tracked Prim Path",
+                "description": "Path of the prim whose state is currently captured.",
+                "default": ""
+            }
+        }
+    }
+}
