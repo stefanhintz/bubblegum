@@ -199,23 +199,6 @@ class OgnPrimReset:
             pass
 
         try:
-            import numpy as np
-            import omni.physics.tensors as physics_tensors
-
-            simulation_view = physics_tensors.create_simulation_view("numpy")
-            rigid_body_view = simulation_view.create_rigid_body_view(prim.GetPath().pathString)
-            if rigid_body_view.count <= 0:
-                return
-
-            indices = np.arange(rigid_body_view.count, dtype=np.int32)
-            zero_linear = np.zeros((rigid_body_view.count, 3), dtype=np.float32)
-            zero_angular = np.zeros((rigid_body_view.count, 3), dtype=np.float32)
-            rigid_body_view.set_linear_velocities(zero_linear, indices)
-            rigid_body_view.set_angular_velocities(zero_angular, indices)
-        except Exception:
-            pass
-
-        try:
             UsdPhysics.RigidBodyAPI(prim).GetVelocityAttr().Set(zero_vec_d)
         except Exception:
             pass
