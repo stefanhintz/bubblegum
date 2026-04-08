@@ -1,5 +1,5 @@
 import omni.graph.core as og
-from pxr import Gf, UsdGeom, UsdPhysics
+from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 
 class OgnPrimReset:
@@ -92,7 +92,7 @@ class OgnPrimReset:
         state.clear()
         state.root_prim_path = root_prim.GetPath().pathString
 
-        for prim in root_prim.Traverse():
+        for prim in Usd.PrimRange(root_prim):
             prim_state = OgnPrimReset._capture_prim_state(prim)
             if prim_state is not None:
                 state.prim_states[prim.GetPath().pathString] = prim_state
