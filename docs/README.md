@@ -45,19 +45,20 @@ To enable this extension, go to `Window > Extensions` and enable `bubblegum`.
 
 ## Prim Reset
 
-The prim reset node captures one prim's initial state and restores it on demand during simulation.
+The prim reset node captures a whole prim subtree's initial state and restores it on demand during simulation.
 
 Typical wiring:
 
 - connect any tick or control execution to `execIn`
 - set `prim`
-- trigger `execReset` whenever you want to restore that prim
+- trigger `execReset` whenever you want to restore that prim and all descendants underneath it
 
 Behavior:
 
-- the first time the node sees a valid `prim`, it captures the prim path, local transform, and xform op stack
-- if the prim has rigid-body API, it also captures the initial rigid-body enabled and kinematic-enabled flags
-- on `execReset`, it restores the captured transform state and attempts to zero rigid-body linear and angular velocities
+- the first time the node sees a valid `prim`, it captures the whole subtree rooted there
+- for every xformable prim in the subtree, it captures the local transform and xform op stack
+- for every rigid-body prim in the subtree, it also captures the initial rigid-body enabled and kinematic-enabled flags
+- on `execReset`, it restores the captured subtree state and attempts to zero rigid-body linear and angular velocities
 
 Inputs:
 

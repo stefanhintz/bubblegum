@@ -5,21 +5,15 @@ from pxr import Gf, UsdGeom, UsdPhysics
 class OgnPrimReset:
     class _State:
         def __init__(self):
-            self.prim_path = ""
-            self.local_transform = None
-            self.xform_state = None
-            self.rigid_body_enabled = None
-            self.kinematic_enabled = None
+            self.root_prim_path = ""
+            self.prim_states = {}
 
         def clear(self):
-            self.prim_path = ""
-            self.local_transform = None
-            self.xform_state = None
-            self.rigid_body_enabled = None
-            self.kinematic_enabled = None
+            self.root_prim_path = ""
+            self.prim_states = {}
 
         def is_captured(self):
-            return bool(self.prim_path)
+            return bool(self.root_prim_path and self.prim_states)
 
     @staticmethod
     def internal_state():
@@ -29,7 +23,7 @@ class OgnPrimReset:
     def compute(db) -> bool:
         state = db.per_instance_state
         db.outputs.isCaptured = state.is_captured()
-        db.outputs.trackedPrimPath = state.prim_path
+        db.outputs.trackedPrimPath = state.root_prim_path
 
         stage = OgnPrimReset._get_stage()
         if stage is None:
@@ -49,15 +43,15 @@ class OgnPrimReset:
             db.log_error(f"Prim does not exist: {prim_path}")
             return False
 
-        if state.prim_path != prim_path or not state.is_captured():
-            OgnPrimReset._capture_state(prim, state)
+        if state.root_prim_path != prim_path or not state.is_captured():
+            OgnPrimReset._capture_subtree_state(prim, state)
 
         if OgnPrimReset._execution_requested(db.inputs, "execReset"):
-            OgnPrimReset._restore_state(prim, state)
+            OgnPrimReset._restore_subtree_state(stage, state)
             db.outputs.execResetDone = og.ExecutionAttributeState.ENABLED
 
         db.outputs.isCaptured = state.is_captured()
-        db.outputs.trackedPrimPath = state.prim_path
+        db.outputs.trackedPrimPath = state.root_prim_path
         return True
 
     @staticmethod
@@ -94,41 +88,83 @@ class OgnPrimReset:
         return [value]
 
     @staticmethod
-    def _capture_state(prim, state):
-        xformable = UsdGeom.Xformable(prim)
+    def _capture_subtree_state(root_prim, state):
+        state.clear()
+        state.root_prim_path = root_prim.GetPath().pathString
+
+        for prim in root_prim.Traverse():
+            prim_state = OgnPrimReset._capture_prim_state(prim)
+            if prim_state is not None:
+                state.prim_states[prim.GetPath().pathString] = prim_state
+
+    @staticmethod
+    def _capture_prim_state(prim):
+        xform_state = None
         local_transform = None
-        if xformable:
+        if UsdGeom.Xformable(prim):
             local_transform = OgnPrimReset._get_local_transformation(prim)
-            state.xform_state = OgnPrimReset._capture_xform_state(prim)
-        else:
-            state.xform_state = None
+            xform_state = OgnPrimReset._capture_xform_state(prim)
 
-        state.prim_path = prim.GetPath().pathString
-        state.local_transform = Gf.Matrix4d(local_transform) if local_transform is not None else None
-        state.rigid_body_enabled = None
-        state.kinematic_enabled = None
-
+        rigid_body_enabled = None
+        kinematic_enabled = None
         if prim.HasAPI(UsdPhysics.RigidBodyAPI):
             rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
             rigid_enabled = rigid_body_api.GetRigidBodyEnabledAttr().Get()
-            kinematic_enabled = rigid_body_api.GetKinematicEnabledAttr().Get()
-            state.rigid_body_enabled = bool(rigid_enabled) if rigid_enabled is not None else None
-            state.kinematic_enabled = bool(kinematic_enabled) if kinematic_enabled is not None else False
+            kinematic = rigid_body_api.GetKinematicEnabledAttr().Get()
+            rigid_body_enabled = bool(rigid_enabled) if rigid_enabled is not None else None
+            kinematic_enabled = bool(kinematic) if kinematic is not None else False
+
+        if xform_state is None and local_transform is None and rigid_body_enabled is None and kinematic_enabled is None:
+            return None
+
+        return {
+            "local_transform": Gf.Matrix4d(local_transform) if local_transform is not None else None,
+            "xform_state": xform_state,
+            "rigid_body_enabled": rigid_body_enabled,
+            "kinematic_enabled": kinematic_enabled,
+        }
 
     @staticmethod
-    def _restore_state(prim, state):
-        if state.xform_state is not None:
-            OgnPrimReset._restore_xform_state(prim, state.xform_state)
-        elif state.local_transform is not None:
-            OgnPrimReset._restore_local_transform(prim, state.local_transform)
+    def _restore_subtree_state(stage, state):
+        if not state.is_captured():
+            return
 
-        if prim.HasAPI(UsdPhysics.RigidBodyAPI):
-            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
-            if state.rigid_body_enabled is not None:
-                rigid_body_api.GetRigidBodyEnabledAttr().Set(state.rigid_body_enabled)
-            if state.kinematic_enabled is not None:
-                rigid_body_api.GetKinematicEnabledAttr().Set(state.kinematic_enabled)
-            OgnPrimReset._zero_rigid_body_velocities(prim)
+        # Restore transforms first so the hierarchy is back in the captured pose before physics state is reapplied.
+        for prim_path, prim_state in state.prim_states.items():
+            prim = stage.GetPrimAtPath(prim_path)
+            if not prim.IsValid():
+                continue
+            OgnPrimReset._restore_transform_state(prim, prim_state)
+
+        # Then restore physics flags and zero velocities.
+        for prim_path, prim_state in state.prim_states.items():
+            prim = stage.GetPrimAtPath(prim_path)
+            if not prim.IsValid():
+                continue
+            OgnPrimReset._restore_physics_state(prim, prim_state)
+
+    @staticmethod
+    def _restore_transform_state(prim, prim_state):
+        xform_state = prim_state.get("xform_state")
+        local_transform = prim_state.get("local_transform")
+
+        if xform_state is not None:
+            OgnPrimReset._restore_xform_state(prim, xform_state)
+        elif local_transform is not None:
+            OgnPrimReset._restore_local_transform(prim, local_transform)
+
+    @staticmethod
+    def _restore_physics_state(prim, prim_state):
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return
+
+        rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+        if prim_state.get("rigid_body_enabled") is not None:
+            rigid_body_api.GetRigidBodyEnabledAttr().Set(prim_state["rigid_body_enabled"])
+        if prim_state.get("kinematic_enabled") is not None:
+            rigid_body_api.GetKinematicEnabledAttr().Set(prim_state["kinematic_enabled"])
+
+        OgnPrimReset._zero_rigid_body_velocities(prim)
 
     @staticmethod
     def _zero_rigid_body_velocities(prim):

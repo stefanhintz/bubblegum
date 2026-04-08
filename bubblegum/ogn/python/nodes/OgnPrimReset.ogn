@@ -5,8 +5,8 @@
         "icon": "icons/icon.svg",
         "uiName": "Prim Reset",
         "description": [
-            "Capture a prim's initial transform and physics state, then restore that state on demand during simulation.",
-            "On reset execution, the prim is restored to its captured transform, rigid-body enable/kinematic flags are restored, and linear/angular velocities are set to zero."
+            "Capture a prim subtree's initial transform and physics state, then restore that whole subtree on demand during simulation.",
+            "On reset execution, the selected prim and all descendants are restored to their captured transform and rigid-body states, and rigid-body linear/angular velocities are set to zero."
         ],
         "categoryDefinitions": "config/CategoryDefinition.json",
         "categories": ["extension:Category"],
@@ -21,7 +21,7 @@
             "prim": {
                 "type": "target",
                 "uiName": "Prim",
-                "description": "Prim whose initial state is captured and later restored."
+                "description": "Root prim whose initial subtree state is captured and later restored."
             },
             "execReset": {
                 "type": "execution",
@@ -37,13 +37,13 @@
             "isCaptured": {
                 "type": "bool",
                 "uiName": "Is Captured",
-                "description": "True when the node has captured an initial state for the selected prim.",
+                "description": "True when the node has captured an initial subtree state for the selected root prim.",
                 "default": false
             },
             "trackedPrimPath": {
                 "type": "token",
                 "uiName": "Tracked Prim Path",
-                "description": "Path of the prim whose state is currently captured.",
+                "description": "Path of the root prim whose subtree state is currently captured.",
                 "default": ""
             }
         }
