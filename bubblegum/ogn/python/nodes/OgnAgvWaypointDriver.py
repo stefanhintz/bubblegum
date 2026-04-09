@@ -2,6 +2,7 @@ import math
 import re
 
 import numpy as np
+import omni.graph.core as og
 import omni.timeline
 import omni.usd
 from pxr import Gf, UsdGeom
