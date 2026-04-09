@@ -436,16 +436,41 @@ class OgnAgvWaypointDriver:
         ops = xformable.GetOrderedXformOps()
         translate_op = None
         orient_op = None
+        fallback_translate_op = None
+        fallback_orient_op = None
         for op in ops:
+            if op.IsInverseOp():
+                continue
+
+            op_name = str(op.GetName())
             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
-                translate_op = op
-            elif op.GetOpType() == UsdGeom.XformOp.TypeOrient:
-                orient_op = op
+                if op_name.endswith(":agvDriver"):
+                    translate_op = op
+                    break
+                if fallback_translate_op is None:
+                    fallback_translate_op = op
+
+        for op in ops:
+            if op.IsInverseOp():
+                continue
+
+            op_name = str(op.GetName())
+            if op.GetOpType() == UsdGeom.XformOp.TypeOrient:
+                if op_name.endswith(":agvDriver"):
+                    orient_op = op
+                    break
+                if fallback_orient_op is None:
+                    fallback_orient_op = op
 
         if translate_op is None:
-            translate_op = xformable.AddTranslateOp()
+            translate_op = fallback_translate_op
         if orient_op is None:
-            orient_op = xformable.AddOrientOp()
+            orient_op = fallback_orient_op
+
+        if translate_op is None:
+            translate_op = xformable.AddTranslateOp(opSuffix="agvDriver")
+        if orient_op is None:
+            orient_op = xformable.AddOrientOp(opSuffix="agvDriver")
 
         translate_op.Set(pos)
         orient_op.Set(quat)
