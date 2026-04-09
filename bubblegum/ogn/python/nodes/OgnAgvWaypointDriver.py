@@ -430,8 +430,8 @@ class OgnAgvWaypointDriver:
 
     @staticmethod
     def _set_local_pose_xformable(xformable, pos_xyz, yaw):
-        pos = Gf.Vec3d(float(pos_xyz[0]), float(pos_xyz[1]), float(pos_xyz[2]))
-        quat = OgnAgvWaypointDriver._quat_from_yaw(float(yaw))
+        pos_d = Gf.Vec3d(float(pos_xyz[0]), float(pos_xyz[1]), float(pos_xyz[2]))
+        quat_d = OgnAgvWaypointDriver._quat_from_yaw(float(yaw))
 
         ops = xformable.GetOrderedXformOps()
         translate_op = None
@@ -472,8 +472,21 @@ class OgnAgvWaypointDriver:
         if orient_op is None:
             orient_op = xformable.AddOrientOp(opSuffix="agvDriver")
 
-        translate_op.Set(pos)
-        orient_op.Set(quat)
+        translate_op.Set(OgnAgvWaypointDriver._coerce_vec3_for_op(translate_op, pos_d))
+        orient_op.Set(OgnAgvWaypointDriver._coerce_quat_for_op(orient_op, quat_d))
+
+    @staticmethod
+    def _coerce_vec3_for_op(op, value):
+        if op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
+            return Gf.Vec3f(float(value[0]), float(value[1]), float(value[2]))
+        return Gf.Vec3d(float(value[0]), float(value[1]), float(value[2]))
+
+    @staticmethod
+    def _coerce_quat_for_op(op, value):
+        imag = value.GetImaginary()
+        if op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
+            return Gf.Quatf(float(value.GetReal()), Gf.Vec3f(float(imag[0]), float(imag[1]), float(imag[2])))
+        return Gf.Quatd(float(value.GetReal()), Gf.Vec3d(float(imag[0]), float(imag[1]), float(imag[2])))
 
     @staticmethod
     def _snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, direction):
