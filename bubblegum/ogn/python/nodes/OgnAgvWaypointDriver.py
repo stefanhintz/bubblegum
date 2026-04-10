@@ -1,5 +1,4 @@
 import math
-import re
 
 import numpy as np
 import omni.graph.core as og
@@ -503,15 +502,16 @@ class OgnAgvWaypointDriver:
         for child in children:
             pos, _quat = OgnAgvWaypointDriver._get_world_pose(child)
             name = child.GetName()
-            wait_match = re.search(r"_waitMS(\d+)", name)
-            bend_match = re.search(r"_bendingCM(\d+)", name)
+            waypoint_data = child.GetCustomData().get("waypoint", {})
+            wait_ms = waypoint_data.get("waitMs")
+            bend_radius_cm = waypoint_data.get("bendRadiusCm")
             items.append(
                 {
                     "name": name,
                     "pos": pos,
                     "reverse": "_reverse" in name,
-                    "wait_ms": int(wait_match.group(1)) if wait_match else 0,
-                    "bend_radius": (float(bend_match.group(1)) / 100.0) if bend_match else 0.0,
+                    "wait_ms": int(wait_ms) if wait_ms is not None else 0,
+                    "bend_radius": float(bend_radius_cm) / 100.0 if bend_radius_cm is not None else 0.0,
                 }
             )
         return items
