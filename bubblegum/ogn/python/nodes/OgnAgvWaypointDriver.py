@@ -160,6 +160,7 @@ class OgnAgvWaypointDriver:
                 return True
             if action == "stop":
                 state.stopped = True
+                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
                 db.outputs.isStopped = True
                 return True
             if action == "reverse":
@@ -246,6 +247,7 @@ class OgnAgvWaypointDriver:
 
             if endpoint_action == "stop":
                 state.stopped = True
+                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
                 db.outputs.isStopped = True
                 OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
@@ -317,6 +319,7 @@ class OgnAgvWaypointDriver:
 
     @staticmethod
     def _set_default_outputs(db):
+        db.outputs.execFinished = og.ExecutionAttributeState.DISABLED
         db.outputs.isRouteValid = False
         db.outputs.isWaiting = False
         db.outputs.isStopped = False

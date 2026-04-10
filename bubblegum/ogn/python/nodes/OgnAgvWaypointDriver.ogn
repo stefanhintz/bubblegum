@@ -95,6 +95,11 @@
             }
         },
         "outputs": {
+            "execFinished": {
+                "type": "execution",
+                "uiName": "Finished",
+                "description": "Execution trigger output fired once when the AGV reaches the end of the active path and stops."
+            },
             "isRouteValid": {
                 "type": "bool",
                 "uiName": "Is Route Valid",
