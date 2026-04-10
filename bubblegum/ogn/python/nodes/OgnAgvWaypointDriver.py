@@ -7,6 +7,12 @@ import omni.timeline
 import omni.usd
 from pxr import Gf, UsdGeom
 
+# Design note:
+# - Constraints: fixed waypoint Xforms under path roots; no live path editing or obstacle handling.
+# - Trade-offs: simple kinematic integration and yaw control over a more physical or generic path follower.
+# - Rejected alternative: a more configurable route/model layer, because the node is easier to use when it reads
+#   waypoint names directly and keeps all state local.
+
 
 class OgnAgvWaypointDriver:
     class _State:
@@ -26,7 +32,6 @@ class OgnAgvWaypointDriver:
             self.bend_state = None
             self.route_signature = None
             self.stopped = False
-            self.last_active_path = None
 
         def _subscribe_timeline_stop(self):
             timeline = omni.timeline.get_timeline_interface()
@@ -58,7 +63,10 @@ class OgnAgvWaypointDriver:
         agv_paths = OgnAgvWaypointDriver._extract_target_paths(db.inputs.agvPrim)
         path_root_paths = OgnAgvWaypointDriver._extract_target_paths(db.inputs.pathRoots)
         agv_path = agv_paths[0] if agv_paths else ""
-        path_root_path = OgnAgvWaypointDriver._select_active_path(path_root_paths, int(db.inputs.activePathIndex))
+        path_root_path = ""
+        if path_root_paths:
+            active_path_index = min(max(int(db.inputs.activePathIndex), 0), len(path_root_paths) - 1)
+            path_root_path = path_root_paths[active_path_index]
 
         if not agv_path:
             db.log_error("inputs:agvPrim is required.")
@@ -86,7 +94,7 @@ class OgnAgvWaypointDriver:
             state.reset()
             return True
 
-        if OgnAgvWaypointDriver._execution_requested(db.inputs, "execReset"):
+        if db.inputs.execReset == og.ExecutionAttributeState.ENABLED:
             state.reset()
             OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
@@ -96,10 +104,9 @@ class OgnAgvWaypointDriver:
         db.outputs.reverseMode = reverse_mode
 
         route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
-        if state.route_signature != route_signature or state.last_active_path != path_root_path:
+        if state.route_signature != route_signature:
             state.reset()
             state.route_signature = route_signature
-            state.last_active_path = path_root_path
 
         timeline = omni.timeline.get_timeline_interface()
         if timeline is not None and not timeline.is_playing():
@@ -335,13 +342,6 @@ class OgnAgvWaypointDriver:
         db.outputs.currentWaypointName = waypoints[idx]["name"]
 
     @staticmethod
-    def _execution_requested(inputs, attr_name):
-        value = getattr(inputs, attr_name, None)
-        if value is None:
-            return False
-        return value == og.ExecutionAttributeState.ENABLED
-
-    @staticmethod
     def _extract_target_paths(target_value):
         if target_value is None:
             return []
@@ -360,14 +360,6 @@ class OgnAgvWaypointDriver:
         if not value or value in {"[]", "None"}:
             return []
         return [value]
-
-    @staticmethod
-    def _select_active_path(path_root_paths, active_path_index):
-        if not path_root_paths:
-            return ""
-
-        clamped_index = min(max(int(active_path_index), 0), len(path_root_paths) - 1)
-        return path_root_paths[clamped_index]
 
     @staticmethod
     def _wrap_pi(angle):
@@ -446,21 +438,16 @@ class OgnAgvWaypointDriver:
             if op.GetOpType() == UsdGeom.XformOp.TypeTranslate:
                 if op_name.endswith(":agvDriver"):
                     translate_op = op
-                    break
-                if fallback_translate_op is None:
+                elif fallback_translate_op is None:
                     fallback_translate_op = op
-
-        for op in ops:
-            if op.IsInverseOp():
-                continue
-
-            op_name = str(op.GetName())
-            if op.GetOpType() == UsdGeom.XformOp.TypeOrient:
+            elif op.GetOpType() == UsdGeom.XformOp.TypeOrient:
                 if op_name.endswith(":agvDriver"):
                     orient_op = op
-                    break
-                if fallback_orient_op is None:
+                elif fallback_orient_op is None:
                     fallback_orient_op = op
+
+            if translate_op is not None and orient_op is not None:
+                break
 
         if translate_op is None:
             translate_op = fallback_translate_op
@@ -472,21 +459,16 @@ class OgnAgvWaypointDriver:
         if orient_op is None:
             orient_op = xformable.AddOrientOp(opSuffix="agvDriver")
 
-        translate_op.Set(OgnAgvWaypointDriver._coerce_vec3_for_op(translate_op, pos_d))
-        orient_op.Set(OgnAgvWaypointDriver._coerce_quat_for_op(orient_op, quat_d))
+        if translate_op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
+            translate_op.Set(Gf.Vec3f(float(pos_d[0]), float(pos_d[1]), float(pos_d[2])))
+        else:
+            translate_op.Set(pos_d)
 
-    @staticmethod
-    def _coerce_vec3_for_op(op, value):
-        if op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
-            return Gf.Vec3f(float(value[0]), float(value[1]), float(value[2]))
-        return Gf.Vec3d(float(value[0]), float(value[1]), float(value[2]))
-
-    @staticmethod
-    def _coerce_quat_for_op(op, value):
-        imag = value.GetImaginary()
-        if op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
-            return Gf.Quatf(float(value.GetReal()), Gf.Vec3f(float(imag[0]), float(imag[1]), float(imag[2])))
-        return Gf.Quatd(float(value.GetReal()), Gf.Vec3d(float(imag[0]), float(imag[1]), float(imag[2])))
+        imag = quat_d.GetImaginary()
+        if orient_op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
+            orient_op.Set(Gf.Quatf(float(quat_d.GetReal()), Gf.Vec3f(float(imag[0]), float(imag[1]), float(imag[2]))))
+        else:
+            orient_op.Set(quat_d)
 
     @staticmethod
     def _snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, direction):
