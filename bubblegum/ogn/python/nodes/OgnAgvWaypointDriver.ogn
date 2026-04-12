@@ -6,7 +6,7 @@
         "uiName": "AGV Waypoint Driver",
         "description": [
             "Drive an AGV prim through waypoint Xforms, including optional waits, corner bending, and reverse-at-endpoints mode.",
-            "Waypoint children are read in lexicographic order from the path root. Name tokens support _waitMS####, _bendingCM###, and _reverse on both endpoints."
+            "Waypoint children are read in lexicographic order from the path root. Per-waypoint custom data under waypoint supports waitMs, bendRadiusCm, and reverse."
         ],
         "categoryDefinitions": "config/CategoryDefinition.json",
         "categories": ["extension:Category"],
@@ -148,7 +148,7 @@
             "reverseMode": {
                 "type": "bool",
                 "uiName": "Reverse Mode",
-                "description": "True when both the first and last waypoint names include _reverse.",
+                "description": "True when the active route is configured for reverse-at-endpoints behavior.",
                 "default": false,
                 "metadata": {
                     "hidden": "true"
@@ -162,12 +162,6 @@
                 "metadata": {
                     "hidden": "true"
                 }
-            },
-            "activePathName": {
-                "type": "token",
-                "uiName": "Active Path Name",
-                "description": "Name of the active path root prim.",
-                "default": ""
             },
             "currentWaypointIndex": {
                 "type": "int",

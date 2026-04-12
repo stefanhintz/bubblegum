@@ -83,11 +83,11 @@ Scene expectations:
 - a path root prim whose child Xforms are waypoints
 - waypoint children are traversed in lexicographic order, so use names like `wp_001`, `wp_002`, ...
 
-Waypoint name tokens:
+Waypoint custom data:
 
-- `_waitMS####`: wait at the waypoint in milliseconds
-- `_bendingCM###`: round a corner with the given radius in centimeters when the corner geometry allows it
-- `_reverse`: enable reverse-at-endpoints mode only when present on both the first and last waypoint
+- `waypoint.waitMs`: wait at the waypoint in milliseconds
+- `waypoint.bendRadiusCm`: round a corner with the given radius in centimeters when the corner geometry allows it
+- `waypoint.reverse`: mark an endpoint as a reverse point
 
 Typical wiring:
 
@@ -118,17 +118,14 @@ Main inputs:
 Main outputs:
 
 - `isRouteValid`
-- `isWaiting`
 - `isStopped`
-- `isRunning`
-- `reverseMode`
-- `activePathName`
-- `currentWaypointIndex`
-- `currentWaypointName`
-- `waypointCount`
+- `execFinished`
 
 Notes:
 
+- `waypoint.reverse` controls endpoint reversal
+- if both endpoints have `waypoint.reverse = true`, the AGV reverses at both ends
+- if only one endpoint has `waypoint.reverse = true`, the AGV turns around there once and stops at the opposite end
 - this first pass expects fixed waypoint Xforms and no live obstacle handling
 - the AGV is moved kinematically by updating its translate/orient ops each evaluation
 - when reverse mode is disabled, the node stays stopped at the endpoint until the timeline is restarted or the route changes

@@ -34,6 +34,7 @@ class OgnAgvWaypointDriver:
             self.reset_on_play = False
             self.agv_path = ""
             self.path_root_path = ""
+            self.returning_from_reverse = False
 
         def _subscribe_timeline_stop(self):
             timeline = omni.timeline.get_timeline_interface()
@@ -96,7 +97,6 @@ class OgnAgvWaypointDriver:
         waypoints = OgnAgvWaypointDriver._read_waypoints(stage, path_root_path)
         db.outputs.waypointCount = len(waypoints)
         db.outputs.isRouteValid = len(waypoints) >= 2
-        db.outputs.activePathName = stage.GetPrimAtPath(path_root_path).GetName() if path_root_path else ""
 
         if len(waypoints) < 2:
             state.reset()
@@ -117,7 +117,9 @@ class OgnAgvWaypointDriver:
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
 
-        reverse_mode = bool(waypoints[0]["reverse"] and waypoints[-1]["reverse"])
+        start_reverse = bool(waypoints[0]["reverse"])
+        end_reverse = bool(waypoints[-1]["reverse"])
+        reverse_mode = start_reverse and end_reverse
         db.outputs.reverseMode = reverse_mode
 
         route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
@@ -183,6 +185,7 @@ class OgnAgvWaypointDriver:
                 return True
             if action == "reverse":
                 state.direction *= -1
+                state.returning_from_reverse = True
                 state.idx += state.direction
                 OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
@@ -250,10 +253,12 @@ class OgnAgvWaypointDriver:
             at_last = state.idx == len(waypoints) - 1
 
             endpoint_action = None
-            if at_last and state.direction == 1:
-                endpoint_action = "reverse" if reverse_mode else "stop"
+            if state.returning_from_reverse:
+                endpoint_action = "stop"
+            elif at_last and state.direction == 1:
+                endpoint_action = "reverse" if (reverse_mode or end_reverse) else "stop"
             elif at_first and state.direction == -1:
-                endpoint_action = "reverse" if reverse_mode else "stop"
+                endpoint_action = "reverse" if (reverse_mode or start_reverse) else "stop"
 
             if wait_ms > 0:
                 state.waiting = True
@@ -271,6 +276,8 @@ class OgnAgvWaypointDriver:
                 return True
             if endpoint_action == "reverse":
                 state.direction *= -1
+                if not reverse_mode:
+                    state.returning_from_reverse = True
                 state.idx += state.direction
             else:
                 state.idx += state.direction
@@ -343,7 +350,6 @@ class OgnAgvWaypointDriver:
         db.outputs.isStopped = False
         db.outputs.isRunning = False
         db.outputs.reverseMode = False
-        db.outputs.activePathName = ""
         db.outputs.currentWaypointIndex = 0
         db.outputs.currentWaypointName = ""
         db.outputs.waypointCount = 0
@@ -553,7 +559,7 @@ class OgnAgvWaypointDriver:
                 {
                     "name": name,
                     "pos": pos,
-                    "reverse": "_reverse" in name,
+                    "reverse": bool(waypoint_data.get("reverse", False)),
                     "wait_ms": int(wait_ms) if wait_ms is not None else 0,
                     "bend_radius": float(bend_radius_cm) / 100.0 if bend_radius_cm is not None else 0.0,
                 }
