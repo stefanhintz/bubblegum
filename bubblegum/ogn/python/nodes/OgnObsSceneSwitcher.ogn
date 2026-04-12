@@ -1,0 +1,50 @@
+{
+    "ObsSceneSwitcher": {
+        "version": 1,
+        "language": "python",
+        "icon": "icons/icon.svg",
+        "uiName": "OBS Scene Switcher",
+        "description": [
+            "Connect to an OBS WebSocket and switch to the requested program scene once per distinct scene name.",
+            "The node caches a single websocket connection and retries on the next compute after a failure."
+        ],
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger."
+            },
+            "sceneName": {
+                "type": "string",
+                "uiName": "Scene Name",
+                "description": "OBS program scene name to activate.",
+                "default": "Scene 1"
+            },
+            "wsUrl": {
+                "type": "string",
+                "uiName": "WebSocket URL",
+                "description": "OBS WebSocket URL, for example ws://127.0.0.1:4455.",
+                "default": "ws://127.0.0.1:4455"
+            },
+            "wsPassword": {
+                "type": "string",
+                "uiName": "WebSocket Password",
+                "description": "OBS WebSocket password.",
+                "default": "your_obs_password",
+                "metadata": {
+                    "hidden": "true"
+                }
+            }
+        },
+        "outputs": {
+            "execDone": {
+                "type": "execution",
+                "description": "Execution trigger output fired when the scene switch succeeds."
+            }
+        }
+    }
+}

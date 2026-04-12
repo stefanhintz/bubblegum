@@ -5,6 +5,7 @@ This extension adds one OmniGraph node for Isaac Sim:
 - `Bubblegum Sticky Pick`
 - `AGV Waypoint Driver`
 - `Prim Reset`
+- `OBS Scene Switcher`
 
 The node implements a simple sticky-gripper behavior:
 
@@ -131,3 +132,31 @@ Notes:
 - this first pass expects fixed waypoint Xforms and no live obstacle handling
 - the AGV is moved kinematically by updating its translate/orient ops each evaluation
 - when reverse mode is disabled, the node stays stopped at the endpoint until the timeline is restarted or the route changes
+
+## OBS Scene Switcher
+
+The OBS node connects to an OBS WebSocket and switches the current program scene once per distinct scene name.
+
+Typical wiring:
+
+- connect any execution trigger to `execIn`
+- set `sceneName`
+- set `wsUrl` if your OBS instance does not use the default local websocket port
+- set `wsPassword`
+
+Inputs:
+
+- `execIn`
+- `sceneName`
+- `wsUrl`
+- `wsPassword`
+
+Outputs:
+
+- `execDone`
+
+Notes:
+
+- the node caches one websocket connection and reuses it while the scene name stays the same
+- if the websocket fails, the node logs an error and retries on the next compute
+- the password input is hidden in the node UI by default
