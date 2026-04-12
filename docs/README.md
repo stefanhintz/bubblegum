@@ -89,6 +89,18 @@ Waypoint custom data:
 - `waypoint.bendRadiusCm`: round a corner with the given radius in centimeters when the corner geometry allows it
 - `waypoint.reverse`: mark an endpoint as a reverse point
 
+Example:
+
+```json
+{
+  "waypoint": {
+    "waitMs": 1000,
+    "bendRadiusCm": 25,
+    "reverse": true
+  }
+}
+```
+
 Typical wiring:
 
 - connect `On Physics Step.execOut` to `AGV Waypoint Driver.execIn`
