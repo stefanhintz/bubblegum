@@ -157,6 +157,7 @@ Outputs:
 
 Notes:
 
+- the node uses a small built-in WebSocket client and does not require `websocket-client`
 - the node caches one websocket connection and reuses it while the scene name stays the same
 - if the websocket fails, the node logs an error and retries on the next compute
 - the password input is hidden in the node UI by default
