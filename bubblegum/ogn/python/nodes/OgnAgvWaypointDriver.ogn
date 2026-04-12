@@ -43,7 +43,10 @@
             "execReset": {
                 "type": "execution",
                 "uiName": "Reset",
-                "description": "Execution trigger that resets route state and snaps the AGV to the first waypoint of the active path."
+                "description": "Execution trigger that resets route state and snaps the AGV to the first waypoint of the active path.",
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "deltaTime": {
                 "type": "double",
@@ -55,43 +58,64 @@
                 "type": "double",
                 "uiName": "Target Speed (m/s)",
                 "description": "Cruising speed in meters per second.",
-                "default": 1.2
+                "default": 1.2,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "maxAccelMps2": {
                 "type": "double",
                 "uiName": "Max Accel (m/s^2)",
                 "description": "Maximum linear acceleration in meters per second squared.",
-                "default": 0.8
+                "default": 0.8,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "maxYawRateRps": {
                 "type": "double",
                 "uiName": "Max Yaw Rate (rad/s)",
                 "description": "Maximum yaw rate in radians per second.",
-                "default": 1.5
+                "default": 1.5,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "maxYawAccelRps2": {
                 "type": "double",
                 "uiName": "Max Yaw Accel (rad/s^2)",
                 "description": "Maximum yaw acceleration in radians per second squared.",
-                "default": 3.0
+                "default": 3.0,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "positionToleranceM": {
                 "type": "double",
                 "uiName": "Position Tolerance (m)",
                 "description": "Planar position tolerance for waypoint arrival.",
-                "default": 0.03
+                "default": 0.03,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "yawToleranceDeg": {
                 "type": "double",
                 "uiName": "Yaw Tolerance (deg)",
                 "description": "Yaw error tolerance in degrees before linear motion is stopped.",
-                "default": 2.0
+                "default": 2.0,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "lookaheadM": {
                 "type": "double",
                 "uiName": "Lookahead (m)",
                 "description": "Planar lookahead distance for heading control.",
-                "default": 0.15
+                "default": 0.15,
+                "metadata": {
+                    "hidden": "true"
+                }
             }
         },
         "outputs": {
@@ -110,7 +134,10 @@
                 "type": "bool",
                 "uiName": "Is Waiting",
                 "description": "True while waiting at a waypoint before continuing.",
-                "default": false
+                "default": false,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "isStopped": {
                 "type": "bool",
@@ -122,13 +149,19 @@
                 "type": "bool",
                 "uiName": "Reverse Mode",
                 "description": "True when both the first and last waypoint names include _reverse.",
-                "default": false
+                "default": false,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "isRunning": {
                 "type": "bool",
                 "uiName": "Is Running",
                 "description": "True when the node is currently allowed to advance along the path.",
-                "default": false
+                "default": false,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "activePathName": {
                 "type": "token",
@@ -140,19 +173,28 @@
                 "type": "int",
                 "uiName": "Current Waypoint Index",
                 "description": "Current active waypoint index in the sorted waypoint list.",
-                "default": 0
+                "default": 0,
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "currentWaypointName": {
                 "type": "token",
                 "uiName": "Current Waypoint Name",
                 "description": "Current active waypoint name.",
-                "default": ""
+                "default": "",
+                "metadata": {
+                    "hidden": "true"
+                }
             },
             "waypointCount": {
                 "type": "int",
                 "uiName": "Waypoint Count",
                 "description": "Number of valid waypoint Xforms under the path root.",
-                "default": 0
+                "default": 0,
+                "metadata": {
+                    "hidden": "true"
+                }
             }
         }
     }

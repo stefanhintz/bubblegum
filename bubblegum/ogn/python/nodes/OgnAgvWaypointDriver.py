@@ -31,6 +31,9 @@ class OgnAgvWaypointDriver:
             self.bend_state = None
             self.route_signature = None
             self.stopped = False
+            self.reset_on_play = False
+            self.agv_path = ""
+            self.path_root_path = ""
 
         def _subscribe_timeline_stop(self):
             timeline = omni.timeline.get_timeline_interface()
@@ -42,7 +45,10 @@ class OgnAgvWaypointDriver:
             )
 
         def _on_timeline_event(self, event):
+            if event.type == int(omni.timeline.TimelineEventType.PLAY):
+                self.reset_on_play = True
             if event.type == int(omni.timeline.TimelineEventType.STOP):
+                OgnAgvWaypointDriver._reset_tracked_agv(self)
                 self.reset()
 
     @staticmethod
@@ -84,6 +90,9 @@ class OgnAgvWaypointDriver:
             db.log_error(f"AGV prim is not Xformable: {agv_path}")
             return False
 
+        state.agv_path = agv_path
+        state.path_root_path = path_root_path
+
         waypoints = OgnAgvWaypointDriver._read_waypoints(stage, path_root_path)
         db.outputs.waypointCount = len(waypoints)
         db.outputs.isRouteValid = len(waypoints) >= 2
@@ -93,9 +102,18 @@ class OgnAgvWaypointDriver:
             state.reset()
             return True
 
+        if state.reset_on_play:
+            state.reset()
+            OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
+            state.route_signature = route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
+            state.reset_on_play = False
+            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+            return True
+
         if db.inputs.execReset == og.ExecutionAttributeState.ENABLED:
             state.reset()
             OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
+            state.route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
 
@@ -491,6 +509,29 @@ class OgnAgvWaypointDriver:
             target_yaw = OgnAgvWaypointDriver._yaw_from_quat(quat)
 
         OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, target_pos, target_yaw)
+
+    @staticmethod
+    def _reset_tracked_agv(state):
+        if not state.agv_path or not state.path_root_path:
+            return
+
+        stage = omni.usd.get_context().get_stage()
+        if stage is None:
+            return
+
+        agv_prim = stage.GetPrimAtPath(state.agv_path)
+        if not agv_prim.IsValid():
+            return
+
+        agv_xform = UsdGeom.Xformable(agv_prim)
+        if not agv_xform:
+            return
+
+        waypoints = OgnAgvWaypointDriver._read_waypoints(stage, state.path_root_path)
+        if len(waypoints) < 2:
+            return
+
+        OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, 1)
 
     @staticmethod
     def _read_waypoints(stage, path_root_path):
