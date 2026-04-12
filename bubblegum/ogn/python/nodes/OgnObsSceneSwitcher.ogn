@@ -34,10 +34,7 @@
                 "type": "string",
                 "uiName": "WebSocket Password",
                 "description": "OBS WebSocket password.",
-                "default": "your_obs_password",
-                "metadata": {
-                    "hidden": "true"
-                }
+                "default": ""
             }
         },
         "outputs": {

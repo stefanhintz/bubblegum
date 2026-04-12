@@ -16,7 +16,7 @@ import omni.graph.core as og
 
 
 WS_URL = "ws://127.0.0.1:4455"
-WS_PASSWORD = "your_obs_password"
+WS_PASSWORD = ""
 DEFAULT_SCENE = "Scene 1"
 
 
@@ -100,6 +100,8 @@ class OgnObsSceneSwitcher:
 
         auth_data = hello.get("d", {}).get("authentication")
         if auth_data:
+            if not ws_password:
+                raise RuntimeError("OBS websocket password is required for this OBS instance")
             identify["d"]["authentication"] = OgnObsSceneSwitcher._make_auth(
                 ws_password,
                 auth_data["salt"],
