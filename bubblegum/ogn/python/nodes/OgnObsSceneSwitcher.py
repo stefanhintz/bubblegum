@@ -109,19 +109,20 @@ class OgnObsSceneSwitcher:
             )
 
         ws.send_text(json.dumps(identify))
-        identified = json.loads(ws.recv_text())
-        if identified.get("op") != 2:
-            raise RuntimeError(f"OBS identify failed: {identified}")
+        identified = OgnObsSceneSwitcher._recv_obs_message(ws, expected_op=2)
+        if identified is None:
+            raise RuntimeError("OBS identify failed: no response received")
 
         return ws
 
     @staticmethod
     def _switch_scene(ws, scene_name):
+        request_id = str(uuid.uuid4())
         payload = {
             "op": 6,
             "d": {
                 "requestType": "SetCurrentProgramScene",
-                "requestId": str(uuid.uuid4()),
+                "requestId": request_id,
                 "requestData": {
                     "sceneName": scene_name,
                 },
@@ -129,9 +130,9 @@ class OgnObsSceneSwitcher:
         }
 
         ws.send_text(json.dumps(payload))
-        response = json.loads(ws.recv_text())
-        if response.get("op") != 7:
-            raise RuntimeError(f"Unexpected OBS response: {response}")
+        response = OgnObsSceneSwitcher._recv_obs_message(ws, expected_op=7, request_id=request_id)
+        if response is None:
+            raise RuntimeError("OBS scene switch failed: no response received")
 
         status = response.get("d", {}).get("requestStatus", {})
         if not status.get("result", False):
@@ -145,6 +146,20 @@ class OgnObsSceneSwitcher:
         except Exception:
             pass
         state.ws = None
+
+    @staticmethod
+    def _recv_obs_message(ws, expected_op, request_id=None):
+        while True:
+            message = json.loads(ws.recv_text())
+            if message.get("op") != expected_op:
+                continue
+
+            if request_id is None:
+                return message
+
+            data = message.get("d", {})
+            if data.get("requestId") == request_id:
+                return message
 
     class _WebSocketClient:
         def __init__(self, sock):
