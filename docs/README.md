@@ -140,6 +140,7 @@ Notes:
 - `waypoint.reverse` controls endpoint reversal
 - if both endpoints have `waypoint.reverse = true`, the AGV reverses at both ends
 - if only one endpoint has `waypoint.reverse = true`, the AGV turns around there once and stops at the opposite end
+- if a terminal dock also has `waypoint.reverse = true`, the AGV docks in, backs out, then continues the route in the opposite direction
 - `waypoint.bendRadiusCm` is a true path blend radius: the AGV drives to the tangent entry point, then follows an arc into the outgoing segment
 - bend arcs use radius-based speed limits, and the AGV only slows on the incoming line when the arc is too short to absorb that deceleration by itself
 - `waypoint.dock` makes the AGV enter the point straight, then back out to the previous waypoint; if there is a following waypoint after the dock it resumes there, otherwise it stops
