@@ -339,6 +339,7 @@ class OgnAgvWaypointDriver:
                 line_primitive = OgnAgvWaypointDriver._make_line_primitive(
                     pos,
                     entry_point,
+                    end_speed=target_speed_mps,
                     on_complete={
                         "type": "activate_primitive",
                         "primitive": OgnAgvWaypointDriver._make_arc_primitive(
