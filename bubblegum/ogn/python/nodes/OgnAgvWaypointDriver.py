@@ -412,7 +412,7 @@ class OgnAgvWaypointDriver:
 
         yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
         if bend_approach:
-            desired_yaw = math.atan2(target[1] - pos[1], target[0] - pos[0])
+            desired_yaw = math.atan2(bend["v1"][1], bend["v1"][0])
         elif dock_mode:
             desired_yaw = yaw
         else:
@@ -428,8 +428,7 @@ class OgnAgvWaypointDriver:
         )
 
         if bend_approach:
-            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
-            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
+            v_cmd = float(db.inputs.targetSpeedMps)
         elif dock_mode:
             v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
             v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
