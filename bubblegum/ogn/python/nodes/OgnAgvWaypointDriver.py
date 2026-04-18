@@ -327,6 +327,7 @@ class OgnAgvWaypointDriver:
                                 "t1": bend["t1"],
                                 "center": bend["center"],
                                 "left": bend["left"],
+                                "v1": bend["v1"],
                                 "v2": bend["v2"],
                                 "radius": bend["radius"],
                                 "start_angle": bend["start_angle"],
