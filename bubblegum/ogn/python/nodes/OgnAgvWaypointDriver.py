@@ -8,12 +8,15 @@ from pxr import Gf, UsdGeom
 
 # Design note:
 # - Constraints: fixed waypoint Xforms under path roots; no live path editing or obstacle handling.
-# - Trade-offs: simple kinematic integration and yaw control over a more physical or generic path follower.
+# - Trade-offs: simple kinematic integration and primitive-based path following over a more physical or generic
+#   controller.
 # - Rejected alternative: a more configurable route/model layer, because the node is easier to use when it reads
-#   waypoint names directly and keeps all state local.
+#   waypoint metadata directly and keeps all state local.
 
 
 class OgnAgvWaypointDriver:
+    MIN_BEND_SPEED_MPS = 0.05
+
     class _State:
         def __init__(self):
             self._timeline_sub = None
@@ -313,22 +316,34 @@ class OgnAgvWaypointDriver:
             )
 
         if bend is not None:
+            bend_speed = OgnAgvWaypointDriver._compute_bend_speed(
+                float(db.inputs.targetSpeedMps),
+                float(db.inputs.maxAccelMps2),
+                bend["radius"],
+            )
             entry_point = np.array([bend["t1"][0], bend["t1"][1], waypoint["pos"][2]], dtype=float)
             if np.linalg.norm(entry_point[:2] - pos[:2]) > float(1e-6):
                 line_primitive = OgnAgvWaypointDriver._make_line_primitive(
                     pos,
                     entry_point,
+                    end_speed=bend_speed,
                     on_complete={
                         "type": "activate_primitive",
                         "primitive": OgnAgvWaypointDriver._make_arc_primitive(
                             bend,
                             waypoint["pos"][2],
                             {"type": "arc_complete"},
+                            speed_limit=bend_speed,
                         ),
                     },
                 )
                 return OgnAgvWaypointDriver._wrap_turn_primitive(yaw, line_primitive, yaw_tol)
-            return OgnAgvWaypointDriver._make_arc_primitive(bend, waypoint["pos"][2], {"type": "arc_complete"})
+            return OgnAgvWaypointDriver._make_arc_primitive(
+                bend,
+                waypoint["pos"][2],
+                {"type": "arc_complete"},
+                speed_limit=bend_speed,
+            )
 
         line_primitive = OgnAgvWaypointDriver._make_line_primitive(
             pos,
@@ -355,7 +370,7 @@ class OgnAgvWaypointDriver:
         }
 
     @staticmethod
-    def _make_line_primitive(start_pos, end_pos, on_complete, reverse_drive=False):
+    def _make_line_primitive(start_pos, end_pos, on_complete, reverse_drive=False, end_speed=0.0, speed_limit=None):
         start = np.array(start_pos, dtype=float)
         end = np.array(end_pos, dtype=float)
         delta = end - start
@@ -374,11 +389,13 @@ class OgnAgvWaypointDriver:
             "length": length,
             "target_yaw": target_yaw,
             "reverse_drive": reverse_drive,
+            "end_speed": max(0.0, float(end_speed)),
+            "speed_limit": None if speed_limit is None else max(0.0, float(speed_limit)),
             "on_complete": on_complete,
         }
 
     @staticmethod
-    def _make_arc_primitive(bend, z_value, on_complete):
+    def _make_arc_primitive(bend, z_value, on_complete, speed_limit=None):
         return {
             "kind": "arc",
             "center": bend["center"].copy(),
@@ -387,6 +404,7 @@ class OgnAgvWaypointDriver:
             "end_angle": float(bend["end_angle"]),
             "turn_sign": 1.0 if bend["left"] else -1.0,
             "z": float(z_value),
+            "speed_limit": None if speed_limit is None else max(0.0, float(speed_limit)),
             "on_complete": on_complete,
         }
 
@@ -410,13 +428,18 @@ class OgnAgvWaypointDriver:
             return False
 
         if primitive["kind"] == "line":
+            accel = float(db.inputs.maxAccelMps2)
             current_progress = float(np.dot(pos[:2] - primitive["start_pos"][:2], primitive["dir"]))
             current_progress = min(max(current_progress, 0.0), float(primitive["length"]))
             remaining = max(0.0, float(primitive["length"]) - current_progress)
-            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * remaining))
-            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
+            end_speed = float(primitive.get("end_speed", 0.0))
+            v_brake = math.sqrt(max(end_speed * end_speed, end_speed * end_speed + 2.0 * accel * remaining))
+            speed_limit = primitive.get("speed_limit")
+            if speed_limit is None:
+                speed_limit = float(db.inputs.targetSpeedMps)
+            v_cmd = min(float(speed_limit), v_brake)
             state.lin_speed = OgnAgvWaypointDriver._move_towards(
-                state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
+                state.lin_speed, v_cmd, accel * dt
             )
             next_progress = min(float(primitive["length"]), current_progress + state.lin_speed * dt)
             pos_next = primitive["start_pos"].copy()
@@ -431,7 +454,9 @@ class OgnAgvWaypointDriver:
             return False
 
         radius = float(primitive["radius"])
-        max_speed = float(db.inputs.targetSpeedMps)
+        max_speed = primitive.get("speed_limit")
+        if max_speed is None:
+            max_speed = float(db.inputs.targetSpeedMps)
         state.lin_speed = OgnAgvWaypointDriver._move_towards(
             state.lin_speed, max_speed, float(db.inputs.maxAccelMps2) * dt
         )
@@ -586,6 +611,18 @@ class OgnAgvWaypointDriver:
             "start_angle": start_angle,
             "end_angle": end_angle,
         }
+
+    @staticmethod
+    def _compute_bend_speed(target_speed, max_accel, radius):
+        if radius <= 1e-6:
+            return OgnAgvWaypointDriver.MIN_BEND_SPEED_MPS
+        return min(
+            float(target_speed),
+            max(
+                OgnAgvWaypointDriver.MIN_BEND_SPEED_MPS,
+                math.sqrt(max(0.0, float(max_accel) * float(radius))),
+            ),
+        )
 
     @staticmethod
     def _set_local_pose_xformable(xformable, pos_xyz, yaw):
