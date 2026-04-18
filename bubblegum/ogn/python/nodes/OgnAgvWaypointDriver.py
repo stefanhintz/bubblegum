@@ -432,8 +432,6 @@ class OgnAgvWaypointDriver:
 
         radius = float(primitive["radius"])
         max_speed = float(db.inputs.targetSpeedMps)
-        if radius > 1e-6 and float(db.inputs.maxYawRateRps) > 0.0:
-            max_speed = min(max_speed, float(db.inputs.maxYawRateRps) * radius)
         state.lin_speed = OgnAgvWaypointDriver._move_towards(
             state.lin_speed, max_speed, float(db.inputs.maxAccelMps2) * dt
         )
