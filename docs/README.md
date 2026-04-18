@@ -86,7 +86,7 @@ Scene expectations:
 Waypoint custom data:
 
 - `waypoint.waitMs`: wait at the waypoint in milliseconds
-- `waypoint.bendRadiusCm`: round a corner with the given radius in centimeters when the corner geometry allows it
+- `waypoint.bendRadiusCm`: blend a corner with a tangent arc of the given radius in centimeters when the geometry allows it
 - `waypoint.reverse`: mark an endpoint as a reverse point
 - `waypoint.dock`: mark a terminal dock point that is approached straight in and backed out in reverse
 
@@ -140,6 +140,7 @@ Notes:
 - `waypoint.reverse` controls endpoint reversal
 - if both endpoints have `waypoint.reverse = true`, the AGV reverses at both ends
 - if only one endpoint has `waypoint.reverse = true`, the AGV turns around there once and stops at the opposite end
+- `waypoint.bendRadiusCm` is a true path blend radius: the AGV drives to the tangent entry point, then follows an arc into the outgoing segment
 - `waypoint.dock` makes the AGV enter the point straight, then back out to the previous waypoint and finish
 - this first pass expects fixed waypoint Xforms and no live obstacle handling
 - the AGV is moved kinematically by updating its translate/orient ops each evaluation

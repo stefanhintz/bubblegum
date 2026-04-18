@@ -178,7 +178,8 @@ class OgnAgvWaypointDriver:
             state.pending_endpoint_action = None
             if action == "bend":
                 if state.bend_state is not None:
-                    state.bend_state["pending"] = False
+                    state.bend_state["phase"] = "arc"
+                    state.bend_state["angle"] = state.bend_state["start_angle"]
                 return True
             if action == "stop":
                 state.stopped = True
@@ -251,8 +252,57 @@ class OgnAgvWaypointDriver:
 
         target = waypoints[state.idx]["pos"]
         dock_mode = bool(waypoints[state.idx]["dock"])
-        bend_active = False
-        bend = None
+        bend = state.bend_state
+        bend_approach = bool(bend is not None and bend["phase"] == "approach")
+        bend_arc = bool(bend is not None and bend["phase"] == "arc")
+
+        if bend_arc:
+            if state.dock_returning:
+                state.bend_state = None
+                state.dock_returning = False
+                state.stopped = True
+                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
+                db.outputs.isStopped = True
+                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+                return True
+
+            radius = float(bend["radius"])
+            angle = float(bend["angle"])
+            end_angle = float(bend["end_angle"])
+            arc_sign = 1.0 if bend["left"] else -1.0
+
+            v_cmd = float(db.inputs.targetSpeedMps)
+            state.lin_speed = OgnAgvWaypointDriver._move_towards(
+                state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
+            )
+            omega = 0.0 if radius <= 1e-6 else arc_sign * state.lin_speed / radius
+            angle_next = angle + omega * dt
+            completed = (arc_sign > 0.0 and angle_next >= end_angle) or (arc_sign < 0.0 and angle_next <= end_angle)
+            if completed:
+                angle_next = end_angle
+
+            center = bend["center"]
+            pos_next = np.array(
+                [
+                    center[0] + radius * math.cos(angle_next),
+                    center[1] + radius * math.sin(angle_next),
+                    pos[2],
+                ],
+                dtype=float,
+            )
+            yaw_next = angle_next + (math.pi * 0.5 if arc_sign > 0.0 else -math.pi * 0.5)
+            state.yaw_rate = omega
+            state.bend_state["angle"] = angle_next
+            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
+
+            if completed:
+                state.bend_state = None
+                state.idx += state.direction
+                state.idx = min(max(state.idx, 0), len(waypoints) - 1)
+
+            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+            return True
+
         if state.bend_state is None and not dock_mode:
             bend_radius = float(waypoints[state.idx]["bend_radius"])
             if bend_radius > 0.0:
@@ -272,40 +322,43 @@ class OgnAgvWaypointDriver:
                             wait_ms = int(waypoints[state.idx]["wait_ms"])
                             state.bend_state = {
                                 "idx": state.idx,
+                                "phase": "approach",
                                 "t2": bend["t2"],
+                                "t1": bend["t1"],
                                 "center": bend["center"],
                                 "left": bend["left"],
                                 "v2": bend["v2"],
-                                "pending": wait_ms > 0,
+                                "radius": bend["radius"],
+                                "start_angle": bend["start_angle"],
+                                "end_angle": bend["end_angle"],
+                                "angle": bend["start_angle"],
+                                "wait_ms": wait_ms,
+                                "waited": False,
                             }
-                            if wait_ms > 0:
-                                state.waiting = True
-                                state.wait_remaining_s = wait_ms / 1000.0
-                                state.pending_endpoint_action = "bend"
-                                db.outputs.isWaiting = True
-                                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                                return True
 
-        if state.bend_state is not None and not state.bend_state["pending"]:
-            bend_active = True
-            bend = state.bend_state
-            target = np.array([bend["t2"][0], bend["t2"][1], waypoints[state.idx]["pos"][2]], dtype=float)
+        if bend_approach:
+            target = np.array([bend["t1"][0], bend["t1"][1], waypoints[state.idx]["pos"][2]], dtype=float)
 
         delta = target - pos
         dist = float(np.linalg.norm(delta[:2]))
 
-        if bend_active and float(np.dot(pos[:2] - bend["t2"], bend["v2"])) >= 0.0:
-            state.bend_state = None
-            state.idx += state.direction
-            state.idx = min(max(state.idx, 0), len(waypoints) - 1)
-            target = waypoints[state.idx]["pos"]
-            dock_mode = bool(waypoints[state.idx]["dock"])
-            delta = target - pos
-            dist = float(np.linalg.norm(delta[:2]))
-            bend_active = False
-            bend = None
+        if bend_approach and dist < float(db.inputs.positionToleranceM):
+            wait_ms = int(bend["wait_ms"])
+            if wait_ms > 0 and not bend["waited"]:
+                state.waiting = True
+                state.wait_remaining_s = wait_ms / 1000.0
+                state.pending_endpoint_action = "bend"
+                db.outputs.isWaiting = True
+                bend["waited"] = True
+                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+                return True
 
-        if dist < float(db.inputs.positionToleranceM) and not bend_active:
+            state.bend_state["phase"] = "arc"
+            state.bend_state["angle"] = state.bend_state["start_angle"]
+            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+            return True
+
+        if dist < float(db.inputs.positionToleranceM) and not bend_approach and not bend_arc:
             wait_ms = int(waypoints[state.idx]["wait_ms"])
             at_first = state.idx == 0
             at_last = state.idx == len(waypoints) - 1
@@ -358,17 +411,10 @@ class OgnAgvWaypointDriver:
             aim = target
 
         yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
-        if dock_mode:
+        if bend_approach:
+            desired_yaw = math.atan2(target[1] - pos[1], target[0] - pos[0])
+        elif dock_mode:
             desired_yaw = yaw
-        elif bend_active:
-            r = pos[:2] - bend["center"]
-            if float(np.linalg.norm(r)) < 1e-6:
-                tangent = bend["v1"]
-            elif bend["left"]:
-                tangent = np.array([-r[1], r[0]])
-            else:
-                tangent = np.array([r[1], -r[0]])
-            desired_yaw = math.atan2(tangent[1], tangent[0])
         else:
             desired_yaw = math.atan2(aim[1] - pos[1], aim[0] - pos[0])
 
@@ -381,11 +427,12 @@ class OgnAgvWaypointDriver:
             state.yaw_rate, yaw_rate_cmd, float(db.inputs.maxYawAccelRps2) * dt
         )
 
-        if dock_mode:
+        if bend_approach:
             v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
             v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
-        elif bend_active:
-            v_cmd = float(db.inputs.targetSpeedMps)
+        elif dock_mode:
+            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
+            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
         elif abs(yaw_err) > yaw_tol:
             v_cmd = 0.0
         else:
@@ -509,7 +556,20 @@ class OgnAgvWaypointDriver:
         cross = v1[0] * v2[1] - v1[1] * v2[0]
         normal = np.array([-v1[1], v1[0]]) if cross > 0.0 else np.array([v1[1], -v1[0]])
         center = t1 + normal * radius
-        return {"t2": t2, "center": center, "left": cross > 0.0, "v1": v1, "v2": v2, "d": d}
+        start_angle = math.atan2(t1[1] - center[1], t1[0] - center[0])
+        end_angle = math.atan2(t2[1] - center[1], t2[0] - center[0])
+        return {
+            "t1": t1,
+            "t2": t2,
+            "center": center,
+            "left": cross > 0.0,
+            "v1": v1,
+            "v2": v2,
+            "d": d,
+            "radius": radius,
+            "start_angle": start_angle,
+            "end_angle": end_angle,
+        }
 
     @staticmethod
     def _set_local_pose_xformable(xformable, pos_xyz, yaw):
