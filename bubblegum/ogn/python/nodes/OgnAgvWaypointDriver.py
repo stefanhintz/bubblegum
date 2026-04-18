@@ -318,7 +318,7 @@ class OgnAgvWaypointDriver:
                     if bend:
                         corner_xy = waypoints[state.idx]["pos"][:2]
                         s = float(np.dot(corner_xy - pos[:2], bend["v1"]))
-                        if 0.0 <= s <= bend["d"]:
+                        if 0.0 <= s <= bend["len1"]:
                             wait_ms = int(waypoints[state.idx]["wait_ms"])
                             state.bend_state = {
                                 "idx": state.idx,
@@ -565,6 +565,8 @@ class OgnAgvWaypointDriver:
             "left": cross > 0.0,
             "v1": v1,
             "v2": v2,
+            "len1": len1,
+            "len2": len2,
             "d": d,
             "radius": radius,
             "start_angle": start_angle,
