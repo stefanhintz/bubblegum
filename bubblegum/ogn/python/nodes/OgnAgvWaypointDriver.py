@@ -577,6 +577,7 @@ class OgnAgvWaypointDriver:
             "left": cross > 0.0,
             "v1": v1,
             "v2": v2,
+            "len1": len1,
             "len2": len2,
             "d": d,
             "radius": radius,
