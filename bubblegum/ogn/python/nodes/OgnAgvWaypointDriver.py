@@ -37,6 +37,8 @@ class OgnAgvWaypointDriver:
             self.returning_from_reverse = False
             self.dock_returning = False
             self.dock_exit_idx = 0
+            self.active_primitive = None
+            self.pending_transition = None
 
         def _subscribe_timeline_stop(self):
             timeline = omni.timeline.get_timeline_interface()
@@ -107,6 +109,7 @@ class OgnAgvWaypointDriver:
         if state.reset_on_play:
             state.reset()
             OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
+            state.idx = min(max(state.direction, 0), len(waypoints) - 1)
             state.route_signature = route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
             state.reset_on_play = False
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
@@ -115,6 +118,7 @@ class OgnAgvWaypointDriver:
         if db.inputs.execReset == og.ExecutionAttributeState.ENABLED:
             state.reset()
             OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
+            state.idx = min(max(state.direction, 0), len(waypoints) - 1)
             state.route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
@@ -127,6 +131,7 @@ class OgnAgvWaypointDriver:
         route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
         if state.route_signature != route_signature:
             state.reset()
+            state.idx = min(max(state.direction, 0), len(waypoints) - 1)
             state.route_signature = route_signature
 
         timeline = omni.timeline.get_timeline_interface()
@@ -151,6 +156,7 @@ class OgnAgvWaypointDriver:
 
         pos, quat = OgnAgvWaypointDriver._get_world_pose(agv_prim)
         yaw = OgnAgvWaypointDriver._yaw_from_quat(quat)
+        yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
 
         if state.waiting:
             state.lin_speed = OgnAgvWaypointDriver._move_towards(
@@ -159,303 +165,303 @@ class OgnAgvWaypointDriver:
             state.yaw_rate = OgnAgvWaypointDriver._move_towards(
                 state.yaw_rate, 0.0, float(db.inputs.maxYawAccelRps2) * dt
             )
-
-            yaw_next = yaw + state.yaw_rate * dt
-            pos_next = pos.copy()
-            pos_next[0] += math.cos(yaw_next) * state.lin_speed * dt
-            pos_next[1] += math.sin(yaw_next) * state.lin_speed * dt
-            pos_next[2] = pos[2]
-            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
-
             state.wait_remaining_s -= dt
             db.outputs.isWaiting = True
-            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             if state.wait_remaining_s > 0.0:
+                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
-
             state.waiting = False
-            action = state.pending_endpoint_action
             state.pending_endpoint_action = None
-            if action == "bend":
-                if state.bend_state is not None:
-                    state.bend_state["angle"] = state.bend_state["start_angle"]
-                return True
-            if action == "stop":
-                state.stopped = True
-                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
-                db.outputs.isStopped = True
-                return True
-            if action == "reverse":
-                state.direction *= -1
-                state.returning_from_reverse = True
-                state.idx += state.direction
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
-            if action == "dock":
-                state.dock_returning = True
-                state.dock_exit_idx = min(max(state.idx - state.direction, 0), len(waypoints) - 1)
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
-            state.idx += state.direction
-            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-            return True
 
-        if state.dock_returning:
-            target = waypoints[state.dock_exit_idx]["pos"]
-            delta = target - pos
-            dist = float(np.linalg.norm(delta[:2]))
+        finished = False
+        finished |= OgnAgvWaypointDriver._ensure_active_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol)
+        if state.active_primitive is not None:
+            finished |= OgnAgvWaypointDriver._advance_primitive(db, state, agv_xform, pos, yaw, dt)
 
-            if dist < float(db.inputs.positionToleranceM):
-                state.dock_returning = False
-                state.stopped = True
-                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
-                db.outputs.isStopped = True
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
+        if finished:
+            db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
+        OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+        return True
 
-            if dist > 1e-6:
-                dir2 = delta[:2] / dist
-                aim = pos.copy()
-                aim[:2] = pos[:2] + dir2 * min(float(db.inputs.lookaheadM), dist)
-            else:
-                aim = target
-
-            yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
-            desired_yaw = yaw
-            yaw_err = OgnAgvWaypointDriver._wrap_pi(desired_yaw - yaw)
-            yaw_rate_cmd = max(
-                -float(db.inputs.maxYawRateRps),
-                min(float(db.inputs.maxYawRateRps), 3.0 * yaw_err),
-            )
-            state.yaw_rate = OgnAgvWaypointDriver._move_towards(
-                state.yaw_rate, yaw_rate_cmd, float(db.inputs.maxYawAccelRps2) * dt
-            )
-
-            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
-            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
-            if abs(yaw_err) > yaw_tol:
-                v_cmd = 0.0
-            state.lin_speed = OgnAgvWaypointDriver._move_towards(
-                state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
-            )
-
-            yaw_next = yaw + state.yaw_rate * dt
-            pos_next = pos.copy()
-            pos_next[0] -= math.cos(yaw_next) * state.lin_speed * dt
-            pos_next[1] -= math.sin(yaw_next) * state.lin_speed * dt
-            pos_next[2] = pos[2]
-            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
-
-            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-            return True
-
-        target = waypoints[state.idx]["pos"]
-        dock_mode = bool(waypoints[state.idx]["dock"])
-        bend = state.bend_state
-        bend_arc = bend is not None
-
-        if bend_arc:
-            if state.dock_returning:
-                state.bend_state = None
-                state.dock_returning = False
-                state.stopped = True
-                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
-                db.outputs.isStopped = True
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
-
-            radius = float(bend["radius"])
-            angle = float(bend["angle"])
-            end_angle = float(bend["end_angle"])
-            arc_sign = 1.0 if bend["left"] else -1.0
-
-            v_cmd = float(db.inputs.targetSpeedMps)
-            state.lin_speed = OgnAgvWaypointDriver._move_towards(
-                state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
-            )
-            omega = 0.0 if radius <= 1e-6 else arc_sign * state.lin_speed / radius
-            angle_next = angle + omega * dt
-            completed = (arc_sign > 0.0 and angle_next >= end_angle) or (arc_sign < 0.0 and angle_next <= end_angle)
-            if completed:
-                angle_next = end_angle
-
-            center = bend["center"]
-            pos_next = np.array(
-                [
-                    center[0] + radius * math.cos(angle_next),
-                    center[1] + radius * math.sin(angle_next),
-                    pos[2],
-                ],
-                dtype=float,
-            )
-            yaw_next = angle_next + (math.pi * 0.5 if arc_sign > 0.0 else -math.pi * 0.5)
-            state.yaw_rate = omega
-            state.bend_state["angle"] = angle_next
-            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
-
-            if completed:
-                state.bend_state = None
-                state.idx += state.direction
-                state.idx = min(max(state.idx, 0), len(waypoints) - 1)
-
-            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-            return True
-
-        active_bend = None
-        bend_progress = None
-        if not dock_mode:
-            bend_radius = float(waypoints[state.idx]["bend_radius"])
-            if bend_radius > 0.0:
-                in_idx = state.idx - state.direction
-                out_idx = state.idx + state.direction
-                if 0 <= in_idx < len(waypoints) and 0 <= out_idx < len(waypoints):
-                    bend = OgnAgvWaypointDriver._compute_bend(
-                        waypoints[in_idx]["pos"],
-                        waypoints[state.idx]["pos"],
-                        waypoints[out_idx]["pos"],
-                        bend_radius,
-                    )
-                    if bend:
-                        progress = float(np.dot(pos[:2] - waypoints[in_idx]["pos"][:2], bend["v1"]))
-                        if 0.0 <= progress <= bend["len1"]:
-                            wait_ms = int(waypoints[state.idx]["wait_ms"])
-                            active_bend = {
-                                "idx": state.idx,
-                                "prev_pos": waypoints[in_idx]["pos"],
-                                "t2": bend["t2"],
-                                "t1": bend["t1"],
-                                "center": bend["center"],
-                                "left": bend["left"],
-                                "v1": bend["v1"],
-                                "v2": bend["v2"],
-                                "radius": bend["radius"],
-                                "entry_progress": bend["len1"] - bend["d"],
-                                "start_angle": bend["start_angle"],
-                                "end_angle": bend["end_angle"],
-                                "angle": bend["start_angle"],
-                                "wait_ms": wait_ms,
-                            }
-                            bend_progress = progress
-                            target = np.array([bend["t1"][0], bend["t1"][1], waypoints[state.idx]["pos"][2]], dtype=float)
-
-        delta = target - pos
-        dist = float(np.linalg.norm(delta[:2]))
-
-        if active_bend is not None:
-            if bend_progress >= float(active_bend["entry_progress"]) - float(db.inputs.positionToleranceM):
-                wait_ms = int(active_bend["wait_ms"])
-                state.bend_state = active_bend
-                OgnAgvWaypointDriver._set_local_pose_xformable(
-                    agv_xform,
-                    np.array([active_bend["t1"][0], active_bend["t1"][1], pos[2]], dtype=float),
-                    math.atan2(active_bend["v1"][1], active_bend["v1"][0]),
+    @staticmethod
+    def _ensure_active_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol):
+        finished = False
+        while not state.waiting and not state.stopped and state.active_primitive is None:
+            if state.pending_transition is not None:
+                transition = state.pending_transition
+                state.pending_transition = None
+                finished |= OgnAgvWaypointDriver._apply_transition(
+                    state, transition, waypoints, pos, yaw, reverse_mode, yaw_tol
                 )
+                continue
+
+            primitive = OgnAgvWaypointDriver._plan_next_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol)
+            if primitive is None:
+                break
+            state.active_primitive = primitive
+        return finished
+
+    @staticmethod
+    def _apply_transition(state, transition, waypoints, pos, yaw, reverse_mode, yaw_tol):
+        finished = False
+        transition_type = transition["type"]
+
+        if transition_type == "activate_primitive":
+            state.active_primitive = transition["primitive"]
+            return False
+
+        if transition_type == "advance_index":
+            state.idx += state.direction
+            state.idx = min(max(state.idx, 0), len(waypoints) - 1)
+            return False
+
+        if transition_type == "arc_complete":
+            state.idx += state.direction
+            state.idx = min(max(state.idx, 0), len(waypoints) - 1)
+            return False
+
+        if transition_type == "reverse_endpoint":
+            state.direction *= -1
+            if transition.get("single_shot", False):
+                state.returning_from_reverse = True
+            state.idx += state.direction
+            state.idx = min(max(state.idx, 0), len(waypoints) - 1)
+            return False
+
+        if transition_type == "stop":
+            state.stopped = True
+            state.lin_speed = 0.0
+            state.yaw_rate = 0.0
+            return True
+
+        if transition_type == "arrive_waypoint":
+            idx = transition["idx"]
+            waypoint = waypoints[idx]
+
+            if waypoint["dock"]:
+                previous_idx = min(max(idx - state.direction, 0), len(waypoints) - 1)
+                reverse_line = OgnAgvWaypointDriver._make_line_primitive(
+                    pos,
+                    waypoints[previous_idx]["pos"],
+                    reverse_drive=True,
+                    on_complete={"type": "stop"},
+                )
+                next_transition = (
+                    {"type": "activate_primitive", "primitive": reverse_line}
+                    if reverse_line is not None
+                    else {"type": "stop"}
+                )
+                wait_ms = int(waypoint["wait_ms"])
                 if wait_ms > 0:
                     state.waiting = True
                     state.wait_remaining_s = wait_ms / 1000.0
-                    state.pending_endpoint_action = "bend"
-                    db.outputs.isWaiting = True
-                    OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                    return True
+                    state.pending_transition = next_transition
+                    return False
+                return OgnAgvWaypointDriver._apply_transition(
+                    state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
+                )
 
-                state.bend_state["angle"] = state.bend_state["start_angle"]
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
-
-        if dist < float(db.inputs.positionToleranceM) and active_bend is None and not bend_arc:
-            wait_ms = int(waypoints[state.idx]["wait_ms"])
-            at_first = state.idx == 0
-            at_last = state.idx == len(waypoints) - 1
-
-            endpoint_action = None
+            at_first = idx == 0
+            at_last = idx == len(waypoints) - 1
             if state.returning_from_reverse:
-                endpoint_action = "stop"
+                next_transition = {"type": "stop"}
             elif at_last and state.direction == 1:
-                endpoint_action = "reverse" if (reverse_mode or end_reverse) else "stop"
+                next_transition = {
+                    "type": "reverse_endpoint" if (reverse_mode or waypoint["reverse"]) else "stop",
+                    "single_shot": not reverse_mode,
+                }
             elif at_first and state.direction == -1:
-                endpoint_action = "reverse" if (reverse_mode or start_reverse) else "stop"
+                next_transition = {
+                    "type": "reverse_endpoint" if (reverse_mode or waypoint["reverse"]) else "stop",
+                    "single_shot": not reverse_mode,
+                }
+            else:
+                next_transition = {"type": "advance_index"}
 
+            wait_ms = int(waypoint["wait_ms"])
             if wait_ms > 0:
                 state.waiting = True
                 state.wait_remaining_s = wait_ms / 1000.0
-                state.pending_endpoint_action = endpoint_action
-                db.outputs.isWaiting = True
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
+                state.pending_transition = next_transition
+                return False
+            return OgnAgvWaypointDriver._apply_transition(
+                state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
+            )
 
-            if endpoint_action == "stop":
-                state.stopped = True
-                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
-                db.outputs.isStopped = True
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
-            if endpoint_action == "reverse":
-                state.direction *= -1
-                if not reverse_mode:
-                    state.returning_from_reverse = True
-                state.idx += state.direction
-            else:
-                state.idx += state.direction
+        return False
 
-            state.idx = min(max(state.idx, 0), len(waypoints) - 1)
-            if endpoint_action is not None:
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
+    @staticmethod
+    def _plan_next_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol):
+        idx = min(max(state.idx, 0), len(waypoints) - 1)
+        waypoint = waypoints[idx]
 
-            target = waypoints[state.idx]["pos"]
-            dock_mode = bool(waypoints[state.idx]["dock"])
-            delta = target - pos
-            dist = float(np.linalg.norm(delta[:2]))
+        bend = None
+        bend_radius = float(waypoint["bend_radius"])
+        in_idx = idx - state.direction
+        out_idx = idx + state.direction
+        if (
+            bend_radius > 0.0
+            and not waypoint["dock"]
+            and 0 <= in_idx < len(waypoints)
+            and 0 <= out_idx < len(waypoints)
+        ):
+            bend = OgnAgvWaypointDriver._compute_bend(
+                waypoints[in_idx]["pos"],
+                waypoint["pos"],
+                waypoints[out_idx]["pos"],
+                bend_radius,
+            )
 
-        if dist > 1e-6:
-            dir2 = delta[:2] / dist
-            aim = pos.copy()
-            aim[:2] = pos[:2] + dir2 * min(float(db.inputs.lookaheadM), dist)
-        else:
-            aim = target
+        if bend is not None:
+            entry_point = np.array([bend["t1"][0], bend["t1"][1], waypoint["pos"][2]], dtype=float)
+            if np.linalg.norm(entry_point[:2] - pos[:2]) > float(1e-6):
+                line_primitive = OgnAgvWaypointDriver._make_line_primitive(
+                    pos,
+                    entry_point,
+                    on_complete={
+                        "type": "activate_primitive",
+                        "primitive": OgnAgvWaypointDriver._make_arc_primitive(
+                            bend,
+                            waypoint["pos"][2],
+                            {"type": "arc_complete"},
+                        ),
+                    },
+                )
+                return OgnAgvWaypointDriver._wrap_turn_primitive(yaw, line_primitive, yaw_tol)
+            return OgnAgvWaypointDriver._make_arc_primitive(bend, waypoint["pos"][2], {"type": "arc_complete"})
 
-        yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
-        if active_bend is not None:
-            desired_yaw = math.atan2(active_bend["v1"][1], active_bend["v1"][0])
-        elif dock_mode:
-            desired_yaw = yaw
-        else:
-            desired_yaw = math.atan2(aim[1] - pos[1], aim[0] - pos[0])
-
-        yaw_err = OgnAgvWaypointDriver._wrap_pi(desired_yaw - yaw)
-        yaw_rate_cmd = max(
-            -float(db.inputs.maxYawRateRps),
-            min(float(db.inputs.maxYawRateRps), 3.0 * yaw_err),
+        line_primitive = OgnAgvWaypointDriver._make_line_primitive(
+            pos,
+            waypoint["pos"],
+            on_complete={"type": "arrive_waypoint", "idx": idx},
         )
-        state.yaw_rate = OgnAgvWaypointDriver._move_towards(
-            state.yaw_rate, yaw_rate_cmd, float(db.inputs.maxYawAccelRps2) * dt
-        )
+        return OgnAgvWaypointDriver._wrap_turn_primitive(yaw, line_primitive, yaw_tol)
 
-        if active_bend is not None:
-            v_cmd = float(db.inputs.targetSpeedMps)
-        elif dock_mode:
-            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
-            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
-        elif abs(yaw_err) > yaw_tol:
-            v_cmd = 0.0
-        else:
-            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
-            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
+    @staticmethod
+    def _wrap_turn_primitive(current_yaw, primitive, yaw_tol):
+        if primitive is None:
+            return None
+        if primitive["kind"] != "line":
+            return primitive
+        yaw_error = OgnAgvWaypointDriver._wrap_pi(primitive["target_yaw"] - current_yaw)
+        if primitive["reverse_drive"] or abs(yaw_error) <= yaw_tol:
+            return primitive
+        return {
+            "kind": "turn",
+            "pos": primitive["start_pos"].copy(),
+            "start_yaw": current_yaw,
+            "end_yaw": primitive["target_yaw"],
+            "next": primitive,
+        }
 
+    @staticmethod
+    def _make_line_primitive(start_pos, end_pos, on_complete, reverse_drive=False):
+        start = np.array(start_pos, dtype=float)
+        end = np.array(end_pos, dtype=float)
+        delta = end - start
+        length = float(np.linalg.norm(delta[:2]))
+        if length < 1e-6:
+            return None
+        direction = delta[:2] / length
+        target_yaw = math.atan2(direction[1], direction[0])
+        if reverse_drive:
+            target_yaw = OgnAgvWaypointDriver._wrap_pi(target_yaw + math.pi)
+        return {
+            "kind": "line",
+            "start_pos": start,
+            "end_pos": end,
+            "dir": direction,
+            "length": length,
+            "target_yaw": target_yaw,
+            "reverse_drive": reverse_drive,
+            "on_complete": on_complete,
+        }
+
+    @staticmethod
+    def _make_arc_primitive(bend, z_value, on_complete):
+        return {
+            "kind": "arc",
+            "center": bend["center"].copy(),
+            "radius": float(bend["radius"]),
+            "angle": float(bend["start_angle"]),
+            "end_angle": float(bend["end_angle"]),
+            "turn_sign": 1.0 if bend["left"] else -1.0,
+            "z": float(z_value),
+            "on_complete": on_complete,
+        }
+
+    @staticmethod
+    def _advance_primitive(db, state, agv_xform, pos, yaw, dt):
+        primitive = state.active_primitive
+        if primitive is None:
+            return False
+
+        if primitive["kind"] == "turn":
+            max_step = float(db.inputs.maxYawRateRps) * dt
+            yaw_error = OgnAgvWaypointDriver._wrap_pi(float(primitive["end_yaw"]) - yaw)
+            yaw_next = primitive["end_yaw"] if abs(yaw_error) <= max_step else yaw + math.copysign(max_step, yaw_error)
+            state.lin_speed = 0.0
+            state.yaw_rate = 0.0 if dt <= 0.0 else (yaw_next - yaw) / dt
+            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, primitive["pos"], yaw_next)
+            if abs(OgnAgvWaypointDriver._wrap_pi(float(primitive["end_yaw"]) - yaw_next)) <= 1e-4:
+                next_primitive = primitive["next"]
+                state.active_primitive = None
+                state.pending_transition = {"type": "activate_primitive", "primitive": next_primitive}
+            return False
+
+        if primitive["kind"] == "line":
+            current_progress = float(np.dot(pos[:2] - primitive["start_pos"][:2], primitive["dir"]))
+            current_progress = min(max(current_progress, 0.0), float(primitive["length"]))
+            remaining = max(0.0, float(primitive["length"]) - current_progress)
+            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * remaining))
+            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
+            state.lin_speed = OgnAgvWaypointDriver._move_towards(
+                state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
+            )
+            next_progress = min(float(primitive["length"]), current_progress + state.lin_speed * dt)
+            pos_next = primitive["start_pos"].copy()
+            pos_next[0] += primitive["dir"][0] * next_progress
+            pos_next[1] += primitive["dir"][1] * next_progress
+            yaw_next = float(primitive["target_yaw"])
+            state.yaw_rate = 0.0
+            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
+            if next_progress >= float(primitive["length"]) - 1e-6:
+                state.active_primitive = None
+                state.pending_transition = primitive["on_complete"]
+            return False
+
+        radius = float(primitive["radius"])
+        max_speed = float(db.inputs.targetSpeedMps)
+        if radius > 1e-6 and float(db.inputs.maxYawRateRps) > 0.0:
+            max_speed = min(max_speed, float(db.inputs.maxYawRateRps) * radius)
         state.lin_speed = OgnAgvWaypointDriver._move_towards(
-            state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
+            state.lin_speed, max_speed, float(db.inputs.maxAccelMps2) * dt
         )
-
-        yaw_next = yaw + state.yaw_rate * dt
-        pos_next = pos.copy()
-        motion_sign = -1.0 if dock_mode else 1.0
-        pos_next[0] += math.cos(yaw_next) * state.lin_speed * dt * motion_sign
-        pos_next[1] += math.sin(yaw_next) * state.lin_speed * dt * motion_sign
-        pos_next[2] = pos[2]
+        dtheta = 0.0 if radius <= 1e-6 else float(primitive["turn_sign"]) * state.lin_speed / radius * dt
+        angle_next = float(primitive["angle"]) + dtheta
+        end_angle = float(primitive["end_angle"])
+        if (
+            primitive["turn_sign"] > 0.0 and angle_next >= end_angle
+        ) or (
+            primitive["turn_sign"] < 0.0 and angle_next <= end_angle
+        ):
+            angle_next = end_angle
+        pos_next = np.array(
+            [
+                primitive["center"][0] + radius * math.cos(angle_next),
+                primitive["center"][1] + radius * math.sin(angle_next),
+                float(primitive["z"]),
+            ],
+            dtype=float,
+        )
+        yaw_next = angle_next + (math.pi * 0.5 if primitive["turn_sign"] > 0.0 else -math.pi * 0.5)
+        state.yaw_rate = 0.0 if dt <= 0.0 else (yaw_next - yaw) / dt
+        primitive["angle"] = angle_next
         OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
-
-        OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-        return True
+        if angle_next == end_angle:
+            state.active_primitive = None
+            state.pending_transition = primitive["on_complete"]
+        return False
 
     @staticmethod
     def _set_default_outputs(db):
