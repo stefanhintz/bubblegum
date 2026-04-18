@@ -89,6 +89,7 @@ Waypoint custom data:
 - `waypoint.bendRadiusCm`: blend a corner with a tangent arc of the given radius in centimeters when the geometry allows it
 - `waypoint.reverse`: mark an endpoint as a reverse point
 - `waypoint.dock`: mark a dock point that is approached straight in and backed out in reverse
+- `waypoint.yawDeg`: optional yaw override in degrees for the waypoint pose, useful for the start/end orientation
 
 Example:
 
@@ -98,7 +99,8 @@ Example:
     "waitMs": 1000,
     "bendRadiusCm": 25,
     "reverse": true,
-    "dock": true
+    "dock": true,
+    "yawDeg": 180
   }
 }
 ```
@@ -141,6 +143,7 @@ Notes:
 - if both endpoints have `waypoint.reverse = true`, the AGV reverses at both ends
 - if only one endpoint has `waypoint.reverse = true`, the AGV turns around there once and stops at the opposite end
 - if a terminal dock also has `waypoint.reverse = true`, the AGV docks in, backs out, then continues the route in the opposite direction
+- `waypoint.yawDeg` overrides the inferred heading at that waypoint; if it is not set, the first and last waypoint use the waypoint prim rotation as their stop/start orientation
 - `waypoint.bendRadiusCm` is a true path blend radius: the AGV drives to the tangent entry point, then follows an arc into the outgoing segment
 - bend arcs use radius-based speed limits, and the AGV only slows on the incoming line when the arc is too short to absorb that deceleration by itself
 - `waypoint.dock` makes the AGV enter the point straight, then back out to the previous waypoint; if there is a following waypoint after the dock it resumes there, otherwise it stops

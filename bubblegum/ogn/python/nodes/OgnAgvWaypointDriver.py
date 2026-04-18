@@ -262,6 +262,16 @@ class OgnAgvWaypointDriver:
             state.yaw_rate = 0.0
             return True
 
+        if transition_type == "turn_then":
+            state.active_primitive = {
+                "kind": "turn",
+                "pos": transition["pos"].copy(),
+                "start_yaw": yaw,
+                "end_yaw": float(transition["yaw"]),
+                "next": transition["next"],
+            }
+            return False
+
         if transition_type == "stop":
             state.stopped = True
             state.lin_speed = 0.0
@@ -327,6 +337,15 @@ class OgnAgvWaypointDriver:
                 state.wait_remaining_s = wait_ms / 1000.0
                 state.pending_transition = next_transition
                 return False
+            if next_transition["type"] == "stop":
+                stop_yaw = OgnAgvWaypointDriver._get_waypoint_yaw(waypoints, idx)
+                if stop_yaw is not None and abs(OgnAgvWaypointDriver._wrap_pi(stop_yaw - yaw)) > 1e-4:
+                    next_transition = {
+                        "type": "turn_then",
+                        "pos": waypoint["pos"].copy(),
+                        "yaw": stop_yaw,
+                        "next": {"type": "stop"},
+                    }
             return OgnAgvWaypointDriver._apply_transition(
                 state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
             )
@@ -743,9 +762,9 @@ class OgnAgvWaypointDriver:
     @staticmethod
     def _snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, direction):
         target_pos = waypoints[0]["pos"]
-        target_yaw = 0.0
+        target_yaw = OgnAgvWaypointDriver._get_waypoint_yaw(waypoints, 0)
 
-        if len(waypoints) >= 2:
+        if target_yaw is None and len(waypoints) >= 2:
             next_idx = min(max(0 + direction, 0), len(waypoints) - 1)
             next_pos = waypoints[next_idx]["pos"]
             delta = next_pos - target_pos
@@ -754,11 +773,21 @@ class OgnAgvWaypointDriver:
             else:
                 _pos, quat = OgnAgvWaypointDriver._get_world_pose(agv_prim)
                 target_yaw = OgnAgvWaypointDriver._yaw_from_quat(quat)
-        else:
+        elif target_yaw is None:
             _pos, quat = OgnAgvWaypointDriver._get_world_pose(agv_prim)
             target_yaw = OgnAgvWaypointDriver._yaw_from_quat(quat)
 
         OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, target_pos, target_yaw)
+
+    @staticmethod
+    def _get_waypoint_yaw(waypoints, idx):
+        idx = min(max(int(idx), 0), len(waypoints) - 1)
+        waypoint = waypoints[idx]
+        if waypoint["yaw"] is not None:
+            return waypoint["yaw"]
+        if idx == 0 or idx == len(waypoints) - 1:
+            return waypoint["pose_yaw"]
+        return None
 
     @staticmethod
     def _reset_tracked_agv(state):
@@ -794,11 +823,12 @@ class OgnAgvWaypointDriver:
 
         items = []
         for child in children:
-            pos, _quat = OgnAgvWaypointDriver._get_world_pose(child)
+            pos, quat = OgnAgvWaypointDriver._get_world_pose(child)
             name = child.GetName()
             waypoint_data = child.GetCustomData().get("waypoint", {})
             wait_ms = waypoint_data.get("waitMs")
             bend_radius_cm = waypoint_data.get("bendRadiusCm")
+            yaw_deg = waypoint_data.get("yawDeg")
             items.append(
                 {
                     "name": name,
@@ -807,6 +837,8 @@ class OgnAgvWaypointDriver:
                     "dock": bool(waypoint_data.get("dock", False) or waypoint_data.get("reverseDrive", False)),
                     "wait_ms": int(wait_ms) if wait_ms is not None else 0,
                     "bend_radius": float(bend_radius_cm) / 100.0 if bend_radius_cm is not None else 0.0,
+                    "pose_yaw": OgnAgvWaypointDriver._yaw_from_quat(quat),
+                    "yaw": math.radians(float(yaw_deg)) if yaw_deg is not None else None,
                 }
             )
         return items
