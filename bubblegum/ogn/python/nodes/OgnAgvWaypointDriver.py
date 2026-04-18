@@ -185,6 +185,7 @@ class OgnAgvWaypointDriver:
             reverse_mode,
             yaw_tol,
             float(db.inputs.targetSpeedMps),
+            float(db.inputs.maxAccelMps2),
             float(db.inputs.maxYawRateRps),
         )
         if state.active_primitive is not None:
@@ -197,7 +198,7 @@ class OgnAgvWaypointDriver:
 
     @staticmethod
     def _ensure_active_primitive(
-        state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_yaw_rate_rps
+        state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_accel_mps2, max_yaw_rate_rps
     ):
         finished = False
         while not state.waiting and not state.stopped and state.active_primitive is None:
@@ -210,7 +211,7 @@ class OgnAgvWaypointDriver:
                 continue
 
             primitive = OgnAgvWaypointDriver._plan_next_primitive(
-                state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_yaw_rate_rps
+                state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_accel_mps2, max_yaw_rate_rps
             )
             if primitive is None:
                 break
@@ -307,7 +308,9 @@ class OgnAgvWaypointDriver:
         return False
 
     @staticmethod
-    def _plan_next_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_yaw_rate_rps):
+    def _plan_next_primitive(
+        state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_accel_mps2, max_yaw_rate_rps
+    ):
         idx = min(max(state.idx, 0), len(waypoints) - 1)
         waypoint = waypoints[idx]
 
@@ -334,12 +337,18 @@ class OgnAgvWaypointDriver:
                 max_yaw_rate_rps,
                 bend["radius"],
             )
+            entry_speed = OgnAgvWaypointDriver._compute_bend_entry_speed(
+                target_speed_mps,
+                bend_speed,
+                max_accel_mps2,
+                bend["arc_length"],
+            )
             entry_point = np.array([bend["t1"][0], bend["t1"][1], waypoint["pos"][2]], dtype=float)
             if np.linalg.norm(entry_point[:2] - pos[:2]) > float(1e-6):
                 line_primitive = OgnAgvWaypointDriver._make_line_primitive(
                     pos,
                     entry_point,
-                    end_speed=target_speed_mps,
+                    end_speed=entry_speed,
                     on_complete={
                         "type": "activate_primitive",
                         "primitive": OgnAgvWaypointDriver._make_arc_primitive(
@@ -623,6 +632,7 @@ class OgnAgvWaypointDriver:
             "radius": radius,
             "start_angle": start_angle,
             "end_angle": end_angle,
+            "arc_length": abs(end_angle - start_angle) * radius,
         }
 
     @staticmethod
@@ -636,6 +646,23 @@ class OgnAgvWaypointDriver:
                 float(max_yaw_rate) * float(radius),
             ),
         )
+
+    @staticmethod
+    def _compute_bend_entry_speed(target_speed, bend_speed, max_accel, arc_length):
+        target_speed = float(target_speed)
+        bend_speed = float(bend_speed)
+        max_accel = float(max_accel)
+        arc_length = max(0.0, float(arc_length))
+
+        if max_accel <= 1e-6:
+            return bend_speed
+
+        required_braking_distance = max(0.0, target_speed * target_speed - bend_speed * bend_speed) / (2.0 * max_accel)
+        if required_braking_distance <= arc_length:
+            return target_speed
+
+        entry_speed = math.sqrt(max(0.0, bend_speed * bend_speed + 2.0 * max_accel * arc_length))
+        return min(target_speed, max(bend_speed, entry_speed))
 
     @staticmethod
     def _set_local_pose_xformable(xformable, pos_xyz, yaw):
