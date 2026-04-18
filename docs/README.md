@@ -88,7 +88,7 @@ Waypoint custom data:
 - `waypoint.waitMs`: wait at the waypoint in milliseconds
 - `waypoint.bendRadiusCm`: round a corner with the given radius in centimeters when the corner geometry allows it
 - `waypoint.reverse`: mark an endpoint as a reverse point
-- `waypoint.reverseDrive`: drive the outgoing segment backward while keeping the chassis heading fixed
+- `waypoint.dock`: mark a terminal dock point that is approached straight in and backed out in reverse
 
 Example:
 
@@ -98,7 +98,7 @@ Example:
     "waitMs": 1000,
     "bendRadiusCm": 25,
     "reverse": true,
-    "reverseDrive": true
+    "dock": true
   }
 }
 ```
@@ -140,7 +140,7 @@ Notes:
 - `waypoint.reverse` controls endpoint reversal
 - if both endpoints have `waypoint.reverse = true`, the AGV reverses at both ends
 - if only one endpoint has `waypoint.reverse = true`, the AGV turns around there once and stops at the opposite end
-- `waypoint.reverseDrive` makes the AGV back out along the next segment instead of turning to face it
+- `waypoint.dock` makes the AGV enter the point straight, then back out to the previous waypoint and finish
 - this first pass expects fixed waypoint Xforms and no live obstacle handling
 - the AGV is moved kinematically by updating its translate/orient ops each evaluation
 - when reverse mode is disabled, the node stays stopped at the endpoint until the timeline is restarted or the route changes

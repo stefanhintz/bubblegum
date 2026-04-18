@@ -35,6 +35,8 @@ class OgnAgvWaypointDriver:
             self.agv_path = ""
             self.path_root_path = ""
             self.returning_from_reverse = False
+            self.dock_returning = False
+            self.dock_exit_idx = 0
 
         def _subscribe_timeline_stop(self):
             timeline = omni.timeline.get_timeline_interface()
@@ -189,15 +191,69 @@ class OgnAgvWaypointDriver:
                 state.idx += state.direction
                 OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
+            if action == "dock":
+                state.dock_returning = True
+                state.dock_exit_idx = min(max(state.idx - state.direction, 0), len(waypoints) - 1)
+                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+                return True
             state.idx += state.direction
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
 
+        if state.dock_returning:
+            target = waypoints[state.dock_exit_idx]["pos"]
+            delta = target - pos
+            dist = float(np.linalg.norm(delta[:2]))
+
+            if dist < float(db.inputs.positionToleranceM):
+                state.dock_returning = False
+                state.stopped = True
+                db.outputs.execFinished = og.ExecutionAttributeState.ENABLED
+                db.outputs.isStopped = True
+                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+                return True
+
+            if dist > 1e-6:
+                dir2 = delta[:2] / dist
+                aim = pos.copy()
+                aim[:2] = pos[:2] + dir2 * min(float(db.inputs.lookaheadM), dist)
+            else:
+                aim = target
+
+            yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
+            desired_yaw = yaw
+            yaw_err = OgnAgvWaypointDriver._wrap_pi(desired_yaw - yaw)
+            yaw_rate_cmd = max(
+                -float(db.inputs.maxYawRateRps),
+                min(float(db.inputs.maxYawRateRps), 3.0 * yaw_err),
+            )
+            state.yaw_rate = OgnAgvWaypointDriver._move_towards(
+                state.yaw_rate, yaw_rate_cmd, float(db.inputs.maxYawAccelRps2) * dt
+            )
+
+            v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
+            v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
+            if abs(yaw_err) > yaw_tol:
+                v_cmd = 0.0
+            state.lin_speed = OgnAgvWaypointDriver._move_towards(
+                state.lin_speed, v_cmd, float(db.inputs.maxAccelMps2) * dt
+            )
+
+            yaw_next = yaw + state.yaw_rate * dt
+            pos_next = pos.copy()
+            pos_next[0] -= math.cos(yaw_next) * state.lin_speed * dt
+            pos_next[1] -= math.sin(yaw_next) * state.lin_speed * dt
+            pos_next[2] = pos[2]
+            OgnAgvWaypointDriver._set_local_pose_xformable(agv_xform, pos_next, yaw_next)
+
+            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+            return True
+
         target = waypoints[state.idx]["pos"]
-        reverse_drive = bool(waypoints[state.idx]["reverse_drive"])
+        dock_mode = bool(waypoints[state.idx]["dock"])
         bend_active = False
         bend = None
-        if state.bend_state is None and not reverse_drive:
+        if state.bend_state is None and not dock_mode:
             bend_radius = float(waypoints[state.idx]["bend_radius"])
             if bend_radius > 0.0:
                 in_idx = state.idx - state.direction
@@ -243,7 +299,7 @@ class OgnAgvWaypointDriver:
             state.idx += state.direction
             state.idx = min(max(state.idx, 0), len(waypoints) - 1)
             target = waypoints[state.idx]["pos"]
-            reverse_drive = bool(waypoints[state.idx]["reverse_drive"])
+            dock_mode = bool(waypoints[state.idx]["dock"])
             delta = target - pos
             dist = float(np.linalg.norm(delta[:2]))
             bend_active = False
@@ -290,7 +346,7 @@ class OgnAgvWaypointDriver:
                 return True
 
             target = waypoints[state.idx]["pos"]
-            reverse_drive = bool(waypoints[state.idx]["reverse_drive"])
+            dock_mode = bool(waypoints[state.idx]["dock"])
             delta = target - pos
             dist = float(np.linalg.norm(delta[:2]))
 
@@ -302,7 +358,7 @@ class OgnAgvWaypointDriver:
             aim = target
 
         yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
-        if reverse_drive:
+        if dock_mode:
             desired_yaw = yaw
         elif bend_active:
             r = pos[:2] - bend["center"]
@@ -325,7 +381,7 @@ class OgnAgvWaypointDriver:
             state.yaw_rate, yaw_rate_cmd, float(db.inputs.maxYawAccelRps2) * dt
         )
 
-        if reverse_drive:
+        if dock_mode:
             v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
             v_cmd = min(float(db.inputs.targetSpeedMps), v_brake)
         elif bend_active:
@@ -342,7 +398,7 @@ class OgnAgvWaypointDriver:
 
         yaw_next = yaw + state.yaw_rate * dt
         pos_next = pos.copy()
-        motion_sign = -1.0 if reverse_drive else 1.0
+        motion_sign = -1.0 if dock_mode else 1.0
         pos_next[0] += math.cos(yaw_next) * state.lin_speed * dt * motion_sign
         pos_next[1] += math.sin(yaw_next) * state.lin_speed * dt * motion_sign
         pos_next[2] = pos[2]
@@ -569,7 +625,7 @@ class OgnAgvWaypointDriver:
                     "name": name,
                     "pos": pos,
                     "reverse": bool(waypoint_data.get("reverse", False)),
-                    "reverse_drive": bool(waypoint_data.get("reverseDrive", False)),
+                    "dock": bool(waypoint_data.get("dock", False) or waypoint_data.get("reverseDrive", False)),
                     "wait_ms": int(wait_ms) if wait_ms is not None else 0,
                     "bend_radius": float(bend_radius_cm) / 100.0 if bend_radius_cm is not None else 0.0,
                 }
