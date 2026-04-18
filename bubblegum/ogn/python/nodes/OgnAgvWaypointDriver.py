@@ -559,13 +559,20 @@ class OgnAgvWaypointDriver:
         cross = v1[0] * v2[1] - v1[1] * v2[0]
         normal = np.array([-v1[1], v1[0]]) if cross > 0.0 else np.array([v1[1], -v1[0]])
         center = t1 + normal * radius
+        left = cross > 0.0
         start_angle = math.atan2(t1[1] - center[1], t1[0] - center[0])
         end_angle = math.atan2(t2[1] - center[1], t2[0] - center[0])
+        if left:
+            while end_angle <= start_angle:
+                end_angle += 2.0 * math.pi
+        else:
+            while end_angle >= start_angle:
+                end_angle -= 2.0 * math.pi
         return {
             "t1": t1,
             "t2": t2,
             "center": center,
-            "left": cross > 0.0,
+            "left": left,
             "v1": v1,
             "v2": v2,
             "len1": len1,
