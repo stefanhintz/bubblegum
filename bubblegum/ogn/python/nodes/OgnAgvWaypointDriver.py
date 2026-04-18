@@ -323,6 +323,7 @@ class OgnAgvWaypointDriver:
                             state.bend_state = {
                                 "idx": state.idx,
                                 "phase": "approach",
+                                "prev_pos": waypoints[in_idx]["pos"],
                                 "t2": bend["t2"],
                                 "t1": bend["t1"],
                                 "center": bend["center"],
@@ -330,6 +331,7 @@ class OgnAgvWaypointDriver:
                                 "v1": bend["v1"],
                                 "v2": bend["v2"],
                                 "radius": bend["radius"],
+                                "entry_progress": bend["len1"] - bend["d"],
                                 "start_angle": bend["start_angle"],
                                 "end_angle": bend["end_angle"],
                                 "angle": bend["start_angle"],
@@ -343,6 +345,21 @@ class OgnAgvWaypointDriver:
         delta = target - pos
         dist = float(np.linalg.norm(delta[:2]))
 
+        if bend_approach:
+            progress = float(np.dot(pos[:2] - bend["prev_pos"][:2], bend["v1"]))
+            if progress < float(bend["entry_progress"]):
+                pass
+            else:
+                state.bend_state["phase"] = "arc"
+                state.bend_state["angle"] = state.bend_state["start_angle"]
+                OgnAgvWaypointDriver._set_local_pose_xformable(
+                    agv_xform,
+                    np.array([bend["t1"][0], bend["t1"][1], pos[2]], dtype=float),
+                    math.atan2(bend["v1"][1], bend["v1"][0]),
+                )
+                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+                return True
+
         if bend_approach and dist < float(db.inputs.positionToleranceM):
             wait_ms = int(bend["wait_ms"])
             if wait_ms > 0 and not bend["waited"]:
@@ -353,11 +370,6 @@ class OgnAgvWaypointDriver:
                 bend["waited"] = True
                 OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
-
-            state.bend_state["phase"] = "arc"
-            state.bend_state["angle"] = state.bend_state["start_angle"]
-            OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-            return True
 
         if dist < float(db.inputs.positionToleranceM) and not bend_approach and not bend_arc:
             wait_ms = int(waypoints[state.idx]["wait_ms"])
