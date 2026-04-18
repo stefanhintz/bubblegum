@@ -178,7 +178,6 @@ class OgnAgvWaypointDriver:
             state.pending_endpoint_action = None
             if action == "bend":
                 if state.bend_state is not None:
-                    state.bend_state["phase"] = "arc"
                     state.bend_state["angle"] = state.bend_state["start_angle"]
                 return True
             if action == "stop":
@@ -253,8 +252,7 @@ class OgnAgvWaypointDriver:
         target = waypoints[state.idx]["pos"]
         dock_mode = bool(waypoints[state.idx]["dock"])
         bend = state.bend_state
-        bend_approach = bool(bend is not None and bend["phase"] == "approach")
-        bend_arc = bool(bend is not None and bend["phase"] == "arc")
+        bend_arc = bend is not None
 
         if bend_arc:
             if state.dock_returning:
@@ -303,7 +301,9 @@ class OgnAgvWaypointDriver:
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
 
-        if state.bend_state is None and not dock_mode:
+        active_bend = None
+        bend_progress = None
+        if not dock_mode:
             bend_radius = float(waypoints[state.idx]["bend_radius"])
             if bend_radius > 0.0:
                 in_idx = state.idx - state.direction
@@ -316,13 +316,11 @@ class OgnAgvWaypointDriver:
                         bend_radius,
                     )
                     if bend:
-                        corner_xy = waypoints[state.idx]["pos"][:2]
-                        s = float(np.dot(corner_xy - pos[:2], bend["v1"]))
-                        if 0.0 <= s <= bend["d"]:
+                        progress = float(np.dot(pos[:2] - waypoints[in_idx]["pos"][:2], bend["v1"]))
+                        if 0.0 <= progress <= bend["len1"]:
                             wait_ms = int(waypoints[state.idx]["wait_ms"])
-                            state.bend_state = {
+                            active_bend = {
                                 "idx": state.idx,
-                                "phase": "approach",
                                 "prev_pos": waypoints[in_idx]["pos"],
                                 "t2": bend["t2"],
                                 "t1": bend["t1"],
@@ -336,42 +334,35 @@ class OgnAgvWaypointDriver:
                                 "end_angle": bend["end_angle"],
                                 "angle": bend["start_angle"],
                                 "wait_ms": wait_ms,
-                                "waited": False,
                             }
-
-        if bend_approach:
-            target = np.array([bend["t1"][0], bend["t1"][1], waypoints[state.idx]["pos"][2]], dtype=float)
+                            bend_progress = progress
+                            target = np.array([bend["t1"][0], bend["t1"][1], waypoints[state.idx]["pos"][2]], dtype=float)
 
         delta = target - pos
         dist = float(np.linalg.norm(delta[:2]))
 
-        if bend_approach:
-            progress = float(np.dot(pos[:2] - bend["prev_pos"][:2], bend["v1"]))
-            if progress < float(bend["entry_progress"]):
-                pass
-            else:
-                state.bend_state["phase"] = "arc"
-                state.bend_state["angle"] = state.bend_state["start_angle"]
+        if active_bend is not None:
+            if bend_progress >= float(active_bend["entry_progress"]) - float(db.inputs.positionToleranceM):
+                wait_ms = int(active_bend["wait_ms"])
+                state.bend_state = active_bend
                 OgnAgvWaypointDriver._set_local_pose_xformable(
                     agv_xform,
-                    np.array([bend["t1"][0], bend["t1"][1], pos[2]], dtype=float),
-                    math.atan2(bend["v1"][1], bend["v1"][0]),
+                    np.array([active_bend["t1"][0], active_bend["t1"][1], pos[2]], dtype=float),
+                    math.atan2(active_bend["v1"][1], active_bend["v1"][0]),
                 )
+                if wait_ms > 0:
+                    state.waiting = True
+                    state.wait_remaining_s = wait_ms / 1000.0
+                    state.pending_endpoint_action = "bend"
+                    db.outputs.isWaiting = True
+                    OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
+                    return True
+
+                state.bend_state["angle"] = state.bend_state["start_angle"]
                 OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
 
-        if bend_approach and dist < float(db.inputs.positionToleranceM):
-            wait_ms = int(bend["wait_ms"])
-            if wait_ms > 0 and not bend["waited"]:
-                state.waiting = True
-                state.wait_remaining_s = wait_ms / 1000.0
-                state.pending_endpoint_action = "bend"
-                db.outputs.isWaiting = True
-                bend["waited"] = True
-                OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
-                return True
-
-        if dist < float(db.inputs.positionToleranceM) and not bend_approach and not bend_arc:
+        if dist < float(db.inputs.positionToleranceM) and active_bend is None and not bend_arc:
             wait_ms = int(waypoints[state.idx]["wait_ms"])
             at_first = state.idx == 0
             at_last = state.idx == len(waypoints) - 1
@@ -424,8 +415,8 @@ class OgnAgvWaypointDriver:
             aim = target
 
         yaw_tol = math.radians(float(db.inputs.yawToleranceDeg))
-        if bend_approach:
-            desired_yaw = math.atan2(bend["v1"][1], bend["v1"][0])
+        if active_bend is not None:
+            desired_yaw = math.atan2(active_bend["v1"][1], active_bend["v1"][0])
         elif dock_mode:
             desired_yaw = yaw
         else:
@@ -440,7 +431,7 @@ class OgnAgvWaypointDriver:
             state.yaw_rate, yaw_rate_cmd, float(db.inputs.maxYawAccelRps2) * dt
         )
 
-        if bend_approach:
+        if active_bend is not None:
             v_cmd = float(db.inputs.targetSpeedMps)
         elif dock_mode:
             v_brake = math.sqrt(max(0.0, 2.0 * float(db.inputs.maxAccelMps2) * dist))
