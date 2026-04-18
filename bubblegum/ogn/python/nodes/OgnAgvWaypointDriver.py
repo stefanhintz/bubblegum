@@ -358,6 +358,7 @@ class OgnAgvWaypointDriver:
     ):
         idx = min(max(state.idx, 0), len(waypoints) - 1)
         waypoint = waypoints[idx]
+        reverse_departure = OgnAgvWaypointDriver._is_departing_endpoint_dock(waypoints, idx, state.direction, pos)
 
         bend = None
         bend_radius = float(waypoint["bend_radius"])
@@ -394,6 +395,7 @@ class OgnAgvWaypointDriver:
                     pos,
                     entry_point,
                     end_speed=entry_speed,
+                    reverse_drive=reverse_departure,
                     on_complete={
                         "type": "activate_primitive",
                         "primitive": OgnAgvWaypointDriver._make_arc_primitive(
@@ -415,6 +417,7 @@ class OgnAgvWaypointDriver:
         line_primitive = OgnAgvWaypointDriver._make_line_primitive(
             pos,
             waypoint["pos"],
+            reverse_drive=reverse_departure,
             on_complete={"type": "arrive_waypoint", "idx": idx},
         )
         return OgnAgvWaypointDriver._wrap_turn_primitive(yaw, line_primitive, yaw_tol)
@@ -708,6 +711,16 @@ class OgnAgvWaypointDriver:
 
         entry_speed = math.sqrt(max(0.0, bend_speed * bend_speed + 2.0 * max_accel * arc_length))
         return min(target_speed, max(bend_speed, entry_speed))
+
+    @staticmethod
+    def _is_departing_endpoint_dock(waypoints, idx, direction, pos):
+        origin_idx = idx - direction
+        if origin_idx not in {0, len(waypoints) - 1}:
+            return False
+        origin = waypoints[origin_idx]
+        if not origin["dock"]:
+            return False
+        return float(np.linalg.norm(pos[:2] - origin["pos"][:2])) <= 0.03
 
     @staticmethod
     def _set_local_pose_xformable(xformable, pos_xyz, yaw):
