@@ -318,7 +318,7 @@ class OgnAgvWaypointDriver:
         if bend is not None:
             bend_speed = OgnAgvWaypointDriver._compute_bend_speed(
                 float(db.inputs.targetSpeedMps),
-                float(db.inputs.maxAccelMps2),
+                float(db.inputs.maxYawRateRps),
                 bend["radius"],
             )
             entry_point = np.array([bend["t1"][0], bend["t1"][1], waypoint["pos"][2]], dtype=float)
@@ -326,7 +326,6 @@ class OgnAgvWaypointDriver:
                 line_primitive = OgnAgvWaypointDriver._make_line_primitive(
                     pos,
                     entry_point,
-                    end_speed=bend_speed,
                     on_complete={
                         "type": "activate_primitive",
                         "primitive": OgnAgvWaypointDriver._make_arc_primitive(
@@ -613,14 +612,14 @@ class OgnAgvWaypointDriver:
         }
 
     @staticmethod
-    def _compute_bend_speed(target_speed, max_accel, radius):
+    def _compute_bend_speed(target_speed, max_yaw_rate, radius):
         if radius <= 1e-6:
             return OgnAgvWaypointDriver.MIN_BEND_SPEED_MPS
         return min(
             float(target_speed),
             max(
                 OgnAgvWaypointDriver.MIN_BEND_SPEED_MPS,
-                math.sqrt(max(0.0, float(max_accel) * float(radius))),
+                float(max_yaw_rate) * float(radius),
             ),
         )
 

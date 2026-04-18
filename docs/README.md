@@ -141,7 +141,7 @@ Notes:
 - if both endpoints have `waypoint.reverse = true`, the AGV reverses at both ends
 - if only one endpoint has `waypoint.reverse = true`, the AGV turns around there once and stops at the opposite end
 - `waypoint.bendRadiusCm` is a true path blend radius: the AGV drives to the tangent entry point, then follows an arc into the outgoing segment
-- bend entry and arc speed are derived from `waypoint.bendRadiusCm`: tight blends slow down more, large-radius blends keep more speed
+- bend arcs use radius-based speed limits: the AGV keeps straight-segment speed into the tangent entry, then slows inside tighter arcs while large-radius blends keep more speed
 - `waypoint.dock` makes the AGV enter the point straight, then back out to the previous waypoint and finish
 - this first pass expects fixed waypoint Xforms and no live obstacle handling
 - the AGV is moved kinematically by updating its translate/orient ops each evaluation
