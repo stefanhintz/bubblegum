@@ -177,7 +177,16 @@ class OgnAgvWaypointDriver:
             state.pending_endpoint_action = None
 
         finished = False
-        finished |= OgnAgvWaypointDriver._ensure_active_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol)
+        finished |= OgnAgvWaypointDriver._ensure_active_primitive(
+            state,
+            waypoints,
+            pos,
+            yaw,
+            reverse_mode,
+            yaw_tol,
+            float(db.inputs.targetSpeedMps),
+            float(db.inputs.maxYawRateRps),
+        )
         if state.active_primitive is not None:
             finished |= OgnAgvWaypointDriver._advance_primitive(db, state, agv_xform, pos, yaw, dt)
 
@@ -187,7 +196,9 @@ class OgnAgvWaypointDriver:
         return True
 
     @staticmethod
-    def _ensure_active_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol):
+    def _ensure_active_primitive(
+        state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_yaw_rate_rps
+    ):
         finished = False
         while not state.waiting and not state.stopped and state.active_primitive is None:
             if state.pending_transition is not None:
@@ -198,7 +209,9 @@ class OgnAgvWaypointDriver:
                 )
                 continue
 
-            primitive = OgnAgvWaypointDriver._plan_next_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol)
+            primitive = OgnAgvWaypointDriver._plan_next_primitive(
+                state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_yaw_rate_rps
+            )
             if primitive is None:
                 break
             state.active_primitive = primitive
@@ -294,7 +307,7 @@ class OgnAgvWaypointDriver:
         return False
 
     @staticmethod
-    def _plan_next_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol):
+    def _plan_next_primitive(state, waypoints, pos, yaw, reverse_mode, yaw_tol, target_speed_mps, max_yaw_rate_rps):
         idx = min(max(state.idx, 0), len(waypoints) - 1)
         waypoint = waypoints[idx]
 
@@ -317,8 +330,8 @@ class OgnAgvWaypointDriver:
 
         if bend is not None:
             bend_speed = OgnAgvWaypointDriver._compute_bend_speed(
-                float(db.inputs.targetSpeedMps),
-                float(db.inputs.maxYawRateRps),
+                target_speed_mps,
+                max_yaw_rate_rps,
                 bend["radius"],
             )
             entry_point = np.array([bend["t1"][0], bend["t1"][1], waypoint["pos"][2]], dtype=float)
