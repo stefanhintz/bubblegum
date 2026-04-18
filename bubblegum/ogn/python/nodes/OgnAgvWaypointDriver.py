@@ -245,6 +245,11 @@ class OgnAgvWaypointDriver:
             state.idx = min(max(state.idx, 0), len(waypoints) - 1)
             return False
 
+        if transition_type == "dock_complete":
+            resume_idx = int(transition["resume_idx"])
+            state.idx = min(max(resume_idx, 0), len(waypoints) - 1)
+            return False
+
         if transition_type == "stop":
             state.stopped = True
             state.lin_speed = 0.0
@@ -257,16 +262,20 @@ class OgnAgvWaypointDriver:
 
             if waypoint["dock"]:
                 previous_idx = min(max(idx - state.direction, 0), len(waypoints) - 1)
+                resume_idx = idx + state.direction
+                reverse_complete = {"type": "stop"}
+                if 0 <= resume_idx < len(waypoints):
+                    reverse_complete = {"type": "dock_complete", "resume_idx": resume_idx}
                 reverse_line = OgnAgvWaypointDriver._make_line_primitive(
                     pos,
                     waypoints[previous_idx]["pos"],
                     reverse_drive=True,
-                    on_complete={"type": "stop"},
+                    on_complete=reverse_complete,
                 )
                 next_transition = (
                     {"type": "activate_primitive", "primitive": reverse_line}
                     if reverse_line is not None
-                    else {"type": "stop"}
+                    else reverse_complete
                 )
                 wait_ms = int(waypoint["wait_ms"])
                 if wait_ms > 0:
