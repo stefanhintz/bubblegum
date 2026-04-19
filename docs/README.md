@@ -8,6 +8,7 @@ This extension adds one OmniGraph node for Isaac Sim:
 - `OBS Scene Switcher`
 - `Cell Store Poller`
 - `Dice Store Sync`
+- `NATS Gripper State`
 
 The node implements a simple sticky-gripper behavior:
 
@@ -267,3 +268,41 @@ Notes:
 - 404 clears the cached pose for that die and leaves the previous stage pose untouched
 - the API position is treated as the top-center of the die and converted to the prim pivot position with `diceHalfHeight`
 - `enableLetterOrientation` applies the same letter-based top-face correction as your script
+
+## NATS Gripper State
+
+The NATS gripper-state node subscribes to Wandelbots NOVA controller I/O subjects and exposes the latest boolean gripper value for a KUKA and a Yaskawa controller.
+
+Typical wiring:
+
+- connect any execution trigger to `execIn`
+- set `enabled = true`
+- set `natsUrl` to the NOVA NATS websocket URL, for example `ws://10.150.113.13:80/api/nats`
+- set `cellName`
+- set `kukaController` / `yaskawaController` to the real controller names from NOVA Setup
+- set `kukaIoName` / `yaskawaIoName` to the actual I/O signal names that represent the gripper state
+
+Inputs:
+
+- `execIn`
+- `enabled`
+- `natsUrl`
+- `token`
+- `cellName`
+- `kukaController`
+- `kukaIoName`
+- `yaskawaController`
+- `yaskawaIoName`
+
+Outputs:
+
+- `isConnected`
+- `lastError`
+- `gripperKukaGripped`
+- `gripperYaskawaGripped`
+
+Notes:
+
+- the node uses a vendored `nats-py` client under [bubblegum/vendor](/Users/stefanhintz/bubblegum/bubblegum/vendor)
+- subscriptions use the documented subject shape `nova.v2.cells.{cell}.controllers.{controller}.ios`
+- the node only extracts one boolean I/O per controller and ignores the rest of the message

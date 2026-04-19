@@ -1,0 +1,97 @@
+{
+    "NatsGripperState": {
+        "version": 1,
+        "language": "python",
+        "icon": "icons/icon.svg",
+        "uiName": "NATS Gripper State",
+        "description": [
+            "Subscribe to Wandelbots NOVA controller I/O subjects over NATS and expose the latest gripper state for two controllers.",
+            "The node keeps the NATS connection and subscriptions off the graph thread and only publishes cached values during compute."
+        ],
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger used to publish the latest cached NATS values."
+            },
+            "enabled": {
+                "type": "bool",
+                "uiName": "Enabled",
+                "description": "When true, the node maintains a NATS connection and subscriptions.",
+                "default": true
+            },
+            "natsUrl": {
+                "type": "string",
+                "uiName": "NATS URL",
+                "description": "Wandelbots NOVA NATS websocket URL.",
+                "default": "ws://10.150.113.13:80/api/nats"
+            },
+            "token": {
+                "type": "string",
+                "uiName": "Token",
+                "description": "Optional bearer token for NOVA NATS authentication.",
+                "default": ""
+            },
+            "cellName": {
+                "type": "string",
+                "uiName": "Cell Name",
+                "description": "NOVA cell identifier used in the subject path.",
+                "default": "cell"
+            },
+            "kukaController": {
+                "type": "string",
+                "uiName": "KUKA Controller",
+                "description": "KUKA controller name from the NOVA Setup app.",
+                "default": "kuka"
+            },
+            "kukaIoName": {
+                "type": "string",
+                "uiName": "KUKA IO Name",
+                "description": "I/O signal name that represents the KUKA gripper state.",
+                "default": "gripped"
+            },
+            "yaskawaController": {
+                "type": "string",
+                "uiName": "Yaskawa Controller",
+                "description": "Yaskawa controller name from the NOVA Setup app.",
+                "default": "yaskawa"
+            },
+            "yaskawaIoName": {
+                "type": "string",
+                "uiName": "Yaskawa IO Name",
+                "description": "I/O signal name that represents the Yaskawa gripper state.",
+                "default": "gripped"
+            }
+        },
+        "outputs": {
+            "isConnected": {
+                "type": "bool",
+                "uiName": "Is Connected",
+                "description": "True when the NATS client is connected and subscriptions are active.",
+                "default": false
+            },
+            "lastError": {
+                "type": "string",
+                "uiName": "Last Error",
+                "description": "Last connection or subscription error message, or empty when healthy.",
+                "default": ""
+            },
+            "gripperKukaGripped": {
+                "type": "bool",
+                "uiName": "Gripper KUKA Gripped",
+                "description": "Latest boolean value of the configured KUKA gripper I/O.",
+                "default": false
+            },
+            "gripperYaskawaGripped": {
+                "type": "bool",
+                "uiName": "Gripper Yaskawa Gripped",
+                "description": "Latest boolean value of the configured Yaskawa gripper I/O.",
+                "default": false
+            }
+        }
+    }
+}
