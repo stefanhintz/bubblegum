@@ -19,15 +19,15 @@ class OgnDiceStoreSync:
 
     NUM_DICES = 5
     ROT_EPS = 1e-8
-    IDENTITY_QUAT = Gf.Quatf(1.0, Gf.Vec3f(0.0, 0.0, 0.0))
-    TOP_FACE_AXIS_LOCAL = Gf.Vec3f(0.0, 0.0, -1.0)
+    IDENTITY_QUAT = Gf.Quatd(1.0, Gf.Vec3d(0.0, 0.0, 0.0))
+    TOP_FACE_AXIS_LOCAL = Gf.Vec3d(0.0, 0.0, -1.0)
     FACE_UP_QUATS = {
-        "P": Gf.Quatf(0.0, Gf.Vec3f(0.0, 1.0, 0.0)),
-        "I": Gf.Quatf(0.70710678, Gf.Vec3f(-0.70710678, 0.0, 0.0)),
+        "P": Gf.Quatd(0.0, Gf.Vec3d(0.0, 1.0, 0.0)),
+        "I": Gf.Quatd(0.70710678, Gf.Vec3d(-0.70710678, 0.0, 0.0)),
         "A": IDENTITY_QUAT,
-        "C": Gf.Quatf(0.70710678, Gf.Vec3f(0.70710678, 0.0, 0.0)),
-        "D": Gf.Quatf(0.70710678, Gf.Vec3f(0.0, -0.70710678, 0.0)),
-        "T": Gf.Quatf(0.70710678, Gf.Vec3f(0.0, -0.70710678, 0.0)),
+        "C": Gf.Quatd(0.70710678, Gf.Vec3d(0.70710678, 0.0, 0.0)),
+        "D": Gf.Quatd(0.70710678, Gf.Vec3d(0.0, -0.70710678, 0.0)),
+        "T": Gf.Quatd(0.70710678, Gf.Vec3d(0.0, -0.70710678, 0.0)),
     }
     FACE_SPIN_DEGREES = {
         "P": 0.0,
@@ -228,7 +228,7 @@ class OgnDiceStoreSync:
         az = rz / angle
         half = angle * 0.5
         s = math.sin(half)
-        return Gf.Quatf(float(math.cos(half)), Gf.Vec3f(float(ax * s), float(ay * s), float(az * s)))
+        return Gf.Quatd(float(math.cos(half)), Gf.Vec3d(float(ax * s), float(ay * s), float(az * s)))
 
     @staticmethod
     def _axis_angle_quat(axis, degrees):
@@ -241,9 +241,9 @@ class OgnDiceStoreSync:
 
         half = math.radians(float(degrees)) * 0.5
         s = math.sin(half) / axis_len
-        return Gf.Quatf(
+        return Gf.Quatd(
             float(math.cos(half)),
-            Gf.Vec3f(float(axis[0] * s), float(axis[1] * s), float(axis[2] * s)),
+            Gf.Vec3d(float(axis[0] * s), float(axis[1] * s), float(axis[2] * s)),
         )
 
     @staticmethod
@@ -272,12 +272,26 @@ class OgnDiceStoreSync:
                 orient_op = op
 
         if translate_op is None:
-            translate_op = xformable.AddTranslateOp()
+            translate_op = xformable.AddTranslateOp(precision=UsdGeom.XformOp.PrecisionDouble)
         if orient_op is None:
-            orient_op = xformable.AddOrientOp()
+            orient_op = xformable.AddOrientOp(precision=UsdGeom.XformOp.PrecisionDouble)
 
         xformable.SetXformOpOrder([translate_op, orient_op])
         return translate_op, orient_op
+
+    @staticmethod
+    def _coerce_vec3_for_op(op, vec):
+        if op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
+            return Gf.Vec3f(float(vec[0]), float(vec[1]), float(vec[2]))
+        return Gf.Vec3d(float(vec[0]), float(vec[1]), float(vec[2]))
+
+    @staticmethod
+    def _coerce_quat_for_op(op, quat):
+        real = float(quat.GetReal())
+        imag = quat.GetImaginary()
+        if op.GetPrecision() == UsdGeom.XformOp.PrecisionFloat:
+            return Gf.Quatf(real, Gf.Vec3f(float(imag[0]), float(imag[1]), float(imag[2])))
+        return Gf.Quatd(real, Gf.Vec3d(float(imag[0]), float(imag[1]), float(imag[2])))
 
     @staticmethod
     def _set_prim_pose(stage, prim_path, pose, letter, position_scale, dice_half_height, enable_letter_orientation):
@@ -293,7 +307,7 @@ class OgnDiceStoreSync:
         if enable_letter_orientation and letter:
             quat = quat * OgnDiceStoreSync._letter_quat(letter)
 
-        top_offset_local = Gf.Vec3f(0.0, 0.0, float(dice_half_height))
+        top_offset_local = Gf.Vec3d(0.0, 0.0, float(dice_half_height))
         rotated_top_offset_f = base_quat.Transform(top_offset_local)
         rotated_top_offset = Gf.Vec3d(
             float(rotated_top_offset_f[0]),
@@ -303,8 +317,8 @@ class OgnDiceStoreSync:
         center_world = top_world - rotated_top_offset
 
         translate_op, orient_op = OgnDiceStoreSync._ensure_xform_ops(prim)
-        translate_op.Set(center_world)
-        orient_op.Set(quat)
+        translate_op.Set(OgnDiceStoreSync._coerce_vec3_for_op(translate_op, center_world))
+        orient_op.Set(OgnDiceStoreSync._coerce_quat_for_op(orient_op, quat))
 
     @staticmethod
     def _poses_different(a, b, eps=1e-6):
