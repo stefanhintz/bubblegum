@@ -1,0 +1,84 @@
+{
+    "DiceStoreSync": {
+        "version": 1,
+        "language": "python",
+        "icon": "icons/icon.svg",
+        "uiName": "Dice Store Sync",
+        "description": [
+            "Poll dice poses from the cell store on a background worker and place dice prims without blocking graph evaluation.",
+            "The node caches the latest pose and letter per die and only updates stage transforms when a value changed."
+        ],
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger used to advance polling state and apply the latest cached poses."
+            },
+            "enabled": {
+                "type": "bool",
+                "uiName": "Enabled",
+                "description": "When true, polling and pose application are active.",
+                "default": true
+            },
+            "baseUrl": {
+                "type": "string",
+                "uiName": "Base URL",
+                "description": "Dice collection URL, for example http://10.150.113.13/api/v2/cells/cell/store/objects/dices.",
+                "default": "http://10.150.113.13/api/v2/cells/cell/store/objects/dices"
+            },
+            "dicePrimPaths": {
+                "type": "target",
+                "uiName": "Dice Prim Paths",
+                "description": "Target dice prims in index order. The first five entries are used."
+            },
+            "pollIntervalS": {
+                "type": "double",
+                "uiName": "Poll Interval (s)",
+                "description": "Minimum time between poll starts in seconds.",
+                "default": 1.0
+            },
+            "requestTimeoutS": {
+                "type": "double",
+                "uiName": "Request Timeout (s)",
+                "description": "Per-request timeout in seconds for each dice fetch.",
+                "default": 0.5
+            },
+            "positionScale": {
+                "type": "double",
+                "uiName": "Position Scale",
+                "description": "Scale factor applied to API XYZ values before writing stage position.",
+                "default": 0.001
+            },
+            "diceHalfHeight": {
+                "type": "double",
+                "uiName": "Dice Half Height",
+                "description": "Local top-center offset from dice pivot center in stage units.",
+                "default": -0.075
+            },
+            "enableLetterOrientation": {
+                "type": "bool",
+                "uiName": "Enable Letter Orientation",
+                "description": "Apply additional face-up orientation from the reported dice letter.",
+                "default": true
+            }
+        },
+        "outputs": {
+            "isConnected": {
+                "type": "bool",
+                "uiName": "Is Connected",
+                "description": "True after the last successful poll cycle.",
+                "default": false
+            },
+            "lastError": {
+                "type": "string",
+                "uiName": "Last Error",
+                "description": "Last poll or placement error message, or empty when the last cycle succeeded.",
+                "default": ""
+            }
+        }
+    }
+}

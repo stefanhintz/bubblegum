@@ -7,6 +7,7 @@ This extension adds one OmniGraph node for Isaac Sim:
 - `Prim Reset`
 - `OBS Scene Switcher`
 - `Cell Store Poller`
+- `Dice Store Sync`
 
 The node implements a simple sticky-gripper behavior:
 
@@ -231,3 +232,38 @@ Notes:
 - the node is intentionally fixed to the required object paths instead of exposing a generic object browser
 - this is a good fit for UI/state synchronization and orchestration
 - it is not a good fit for hard real-time control loops; keep robot motion control on the local simulation/control side
+
+## Dice Store Sync
+
+The dice sync node polls the five `dices/<index>` objects from the cell store on a background worker and applies the latest pose to five configured dice prims.
+
+Typical wiring:
+
+- connect any execution trigger to `execIn`
+- set `enabled = true`
+- set `baseUrl` to the dice collection root, for example `http://10.150.113.13/api/v2/cells/cell/store/objects/dices`
+- set `dicePrimPaths` to the five dice prims in API index order
+
+Inputs:
+
+- `execIn`
+- `enabled`
+- `baseUrl`
+- `dicePrimPaths`
+- `pollIntervalS`
+- `requestTimeoutS`
+- `positionScale`
+- `diceHalfHeight`
+- `enableLetterOrientation`
+
+Outputs:
+
+- `isConnected`
+- `lastError`
+
+Notes:
+
+- the node uses the same non-blocking background poll pattern as `Cell Store Poller`
+- 404 clears the cached pose for that die and leaves the previous stage pose untouched
+- the API position is treated as the top-center of the die and converted to the prim pivot position with `diceHalfHeight`
+- `enableLetterOrientation` applies the same letter-based top-face correction as your script
