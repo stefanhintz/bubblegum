@@ -146,7 +146,7 @@ Notes:
 - if the first or last waypoint is a dock, the AGV departs that endpoint in reverse from the dock pose instead of turning in place first
 - `waypoint.bendRadiusCm` is a true path blend radius: the AGV drives to the tangent entry point, then follows an arc into the outgoing segment
 - bend arcs use radius-based speed limits, and the AGV only slows on the incoming line when the arc is too short to absorb that deceleration by itself
-- `waypoint.dock` makes the AGV enter the point straight; if there is a following waypoint after the dock it backs out and resumes there, otherwise it stays parked at the dock
+- `waypoint.dock` makes the AGV enter the point straight; if there is a following waypoint after the dock it backs out and resumes there, otherwise it stays parked at the dock unless `waypoint.reverse = true`, in which case it backs out and continues in the opposite direction
 - this first pass expects fixed waypoint Xforms and no live obstacle handling
 - the AGV is moved kinematically by updating its translate/orient ops each evaluation
 - when reverse mode is disabled, the node stays stopped at the endpoint until the timeline is restarted or the route changes
