@@ -6,6 +6,7 @@ This extension adds one OmniGraph node for Isaac Sim:
 - `AGV Waypoint Driver`
 - `Prim Reset`
 - `OBS Scene Switcher`
+- `Cell Store Poller`
 
 The node implements a simple sticky-gripper behavior:
 
@@ -179,3 +180,54 @@ Notes:
 - the node caches one websocket connection and reuses it while the scene name stays the same
 - if the websocket fails, the node logs an error and retries on the next compute
 - the password input is visible and should be set when OBS authentication is enabled
+
+## Cell Store Poller
+
+The cell store poller reads a fixed set of HTTP JSON objects on a background worker and exposes the latest cached values without blocking graph evaluation.
+
+Polled objects:
+
+- `agv_state_machine`
+- `dices/0`
+- `dices/1`
+- `dices/2`
+- `dices/3`
+- `dices/4`
+- `gripper/kuka`
+- `gripper/yaskawa`
+
+Typical wiring:
+
+- connect any execution trigger to `execIn`
+- set `enabled = true`
+- set `baseUrl` to the object-store root, for example `http://10.150.113.13/api/v2/cells/cell/store/objects`
+- choose `pollIntervalS` and `requestTimeoutS` for the update rate you want
+
+Inputs:
+
+- `execIn`
+- `enabled`
+- `baseUrl`
+- `pollIntervalS`
+- `requestTimeoutS`
+
+Outputs:
+
+- `isConnected`
+- `lastError`
+- `agvStatus`
+- `agvRunning`
+- `agvLowBattery`
+- `agvChargeAfterDump`
+- `agvError`
+- `dice0Position` ... `dice4Position`
+- `dice0Letter` ... `dice4Letter`
+- `gripperKukaGripped`
+- `gripperYaskawaGripped`
+
+Notes:
+
+- the node does not block `compute()` with HTTP requests; it only publishes the last cached snapshot
+- the node is intentionally fixed to the required object paths instead of exposing a generic object browser
+- this is a good fit for UI/state synchronization and orchestration
+- it is not a good fit for hard real-time control loops; keep robot motion control on the local simulation/control side

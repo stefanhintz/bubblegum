@@ -1,0 +1,158 @@
+{
+    "CellStorePoller": {
+        "version": 1,
+        "language": "python",
+        "icon": "icons/icon.svg",
+        "uiName": "Cell Store Poller",
+        "description": [
+            "Poll selected objects from a cell store HTTP API without blocking graph evaluation.",
+            "The node fetches AGV state, five dice objects, and KUKA/Yaskawa gripper state on a background worker and exposes the latest cached values."
+        ],
+        "categoryDefinitions": "config/CategoryDefinition.json",
+        "categories": ["extension:Category"],
+        "state": {
+            "$comment": "Opaque per-node state managed by the Python implementation."
+        },
+        "inputs": {
+            "execIn": {
+                "type": "execution",
+                "description": "Execution trigger used to advance polling state and publish the latest cached values."
+            },
+            "enabled": {
+                "type": "bool",
+                "uiName": "Enabled",
+                "description": "When true, polling is active.",
+                "default": true
+            },
+            "baseUrl": {
+                "type": "string",
+                "uiName": "Base URL",
+                "description": "Base object-store URL, for example http://10.150.113.13/api/v2/cells/cell/store/objects.",
+                "default": "http://10.150.113.13/api/v2/cells/cell/store/objects"
+            },
+            "pollIntervalS": {
+                "type": "double",
+                "uiName": "Poll Interval (s)",
+                "description": "Minimum time between poll starts in seconds.",
+                "default": 0.5
+            },
+            "requestTimeoutS": {
+                "type": "double",
+                "uiName": "Request Timeout (s)",
+                "description": "Per-request timeout in seconds for each HTTP fetch.",
+                "default": 0.2
+            }
+        },
+        "outputs": {
+            "isConnected": {
+                "type": "bool",
+                "uiName": "Is Connected",
+                "description": "True after the last successful full poll.",
+                "default": false
+            },
+            "lastError": {
+                "type": "string",
+                "uiName": "Last Error",
+                "description": "Last poll error message, or empty when the last poll succeeded.",
+                "default": ""
+            },
+            "agvStatus": {
+                "type": "string",
+                "uiName": "AGV Status",
+                "description": "AGV state-machine status string.",
+                "default": ""
+            },
+            "agvRunning": {
+                "type": "bool",
+                "uiName": "AGV Running",
+                "description": "AGV running flag.",
+                "default": false
+            },
+            "agvLowBattery": {
+                "type": "bool",
+                "uiName": "AGV Low Battery",
+                "description": "AGV low-battery flag.",
+                "default": false
+            },
+            "agvChargeAfterDump": {
+                "type": "bool",
+                "uiName": "AGV Charge After Dump",
+                "description": "AGV charge-after-dump flag.",
+                "default": false
+            },
+            "agvError": {
+                "type": "string",
+                "uiName": "AGV Error",
+                "description": "AGV error string.",
+                "default": ""
+            },
+            "dice0Position": {
+                "type": "double[]",
+                "uiName": "Dice 0 Position",
+                "description": "Six-value dice pose array from dices/0."
+            },
+            "dice0Letter": {
+                "type": "string",
+                "uiName": "Dice 0 Letter",
+                "description": "Dice letter from dices/0.",
+                "default": ""
+            },
+            "dice1Position": {
+                "type": "double[]",
+                "uiName": "Dice 1 Position",
+                "description": "Six-value dice pose array from dices/1."
+            },
+            "dice1Letter": {
+                "type": "string",
+                "uiName": "Dice 1 Letter",
+                "description": "Dice letter from dices/1.",
+                "default": ""
+            },
+            "dice2Position": {
+                "type": "double[]",
+                "uiName": "Dice 2 Position",
+                "description": "Six-value dice pose array from dices/2."
+            },
+            "dice2Letter": {
+                "type": "string",
+                "uiName": "Dice 2 Letter",
+                "description": "Dice letter from dices/2.",
+                "default": ""
+            },
+            "dice3Position": {
+                "type": "double[]",
+                "uiName": "Dice 3 Position",
+                "description": "Six-value dice pose array from dices/3."
+            },
+            "dice3Letter": {
+                "type": "string",
+                "uiName": "Dice 3 Letter",
+                "description": "Dice letter from dices/3.",
+                "default": ""
+            },
+            "dice4Position": {
+                "type": "double[]",
+                "uiName": "Dice 4 Position",
+                "description": "Six-value dice pose array from dices/4."
+            },
+            "dice4Letter": {
+                "type": "string",
+                "uiName": "Dice 4 Letter",
+                "description": "Dice letter from dices/4.",
+                "default": ""
+            },
+            "gripperKukaGripped": {
+                "type": "bool",
+                "uiName": "Gripper KUKA Gripped",
+                "description": "True when gripper/kuka reports gripped.",
+                "default": false
+            },
+            "gripperYaskawaGripped": {
+                "type": "bool",
+                "uiName": "Gripper Yaskawa Gripped",
+                "description": "True when gripper/yaskawa reports gripped.",
+                "default": false
+            }
+        }
+    }
+}
