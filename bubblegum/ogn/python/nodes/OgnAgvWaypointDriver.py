@@ -290,6 +290,18 @@ class OgnAgvWaypointDriver:
                             "single_shot": not reverse_mode,
                         }
                     next_transition = reverse_complete
+                    if waypoint["reverse"]:
+                        reverse_line = OgnAgvWaypointDriver._make_line_primitive(
+                            pos,
+                            waypoints[previous_idx]["pos"],
+                            reverse_drive=True,
+                            on_complete=reverse_complete,
+                        )
+                        next_transition = (
+                            {"type": "activate_primitive", "primitive": reverse_line}
+                            if reverse_line is not None
+                            else reverse_complete
+                        )
                     wait_ms = int(waypoint["wait_ms"])
                     if wait_ms > 0:
                         state.waiting = True
