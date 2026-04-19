@@ -304,5 +304,6 @@ Outputs:
 Notes:
 
 - the node uses a vendored `nats-py` client under [bubblegum/vendor](/Users/stefanhintz/bubblegum/bubblegum/vendor)
+- the vendored dependencies also include the `aiohttp` WebSocket support required by the 26.1 NOVA NATS setup docs
 - subscriptions use the documented subject shape `nova.v2.cells.{cell}.controllers.{controller}.ios`
 - the node only extracts one boolean I/O per controller and ignores the rest of the message
