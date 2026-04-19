@@ -250,18 +250,6 @@ class OgnAgvWaypointDriver:
             state.idx = min(max(resume_idx, 0), len(waypoints) - 1)
             return False
 
-        if transition_type == "dock_reverse_endpoint":
-            previous_idx = int(transition["previous_idx"])
-            state.direction *= -1
-            next_idx = previous_idx + state.direction
-            if 0 <= next_idx < len(waypoints):
-                state.idx = next_idx
-                return False
-            state.stopped = True
-            state.lin_speed = 0.0
-            state.yaw_rate = 0.0
-            return True
-
         if transition_type == "turn_then":
             state.active_primitive = {
                 "kind": "turn",
@@ -285,14 +273,22 @@ class OgnAgvWaypointDriver:
             if waypoint["dock"]:
                 previous_idx = min(max(idx - state.direction, 0), len(waypoints) - 1)
                 resume_idx = idx + state.direction
+                if not (0 <= resume_idx < len(waypoints)):
+                    reverse_complete = {"type": "stop"}
+                    next_transition = reverse_complete
+                    wait_ms = int(waypoint["wait_ms"])
+                    if wait_ms > 0:
+                        state.waiting = True
+                        state.wait_remaining_s = wait_ms / 1000.0
+                        state.pending_transition = next_transition
+                        return False
+                    return OgnAgvWaypointDriver._apply_transition(
+                        state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
+                    )
+
                 reverse_complete = {"type": "stop"}
                 if 0 <= resume_idx < len(waypoints):
                     reverse_complete = {"type": "dock_complete", "resume_idx": resume_idx}
-                elif waypoint["reverse"]:
-                    reverse_complete = {
-                        "type": "dock_reverse_endpoint",
-                        "previous_idx": previous_idx,
-                    }
                 reverse_line = OgnAgvWaypointDriver._make_line_primitive(
                     pos,
                     waypoints[previous_idx]["pos"],
