@@ -8,12 +8,16 @@ from pxr import Gf, Usd, UsdGeom, UsdPhysics
 
 class OgnBubblegumPy:
     RECOVERY_KEY = "bubblegumRecovery"
+    RELEASE_GRACE_S = 0.2
 
     class _State:
         def __init__(self):
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
             self.restore_kinematic_enabled = None
+            self.pending_release_prim_path = ""
+            self.pending_release_restore_kinematic_enabled = None
+            self.pending_release_deadline = 0.0
             self.original_local_transforms = {}
             self.original_xform_states = {}
             self.original_kinematic_enabled = {}
@@ -56,6 +60,8 @@ class OgnBubblegumPy:
         if stage is None:
             db.log_error("No USD stage is available.")
             return False
+
+        OgnBubblegumPy._update_pending_release(stage, state)
 
         timeline = omni.timeline.get_timeline_interface()
         is_playing = timeline.is_playing() if timeline is not None else True
@@ -115,6 +121,7 @@ class OgnBubblegumPy:
                     if candidate_path not in state.original_local_transforms and original_local is not None:
                         state.original_local_transforms[candidate_path] = Gf.Matrix4d(original_local)
                 OgnBubblegumPy._increment_active_holders(candidate_prim)
+                OgnBubblegumPy._cancel_pending_release(state, candidate_path)
                 state.attached_to_helper = OgnBubblegumPy._compute_attach_offset(helper_prim, candidate_prim)
                 OgnBubblegumPy._prepare_transform_control(candidate_prim)
                 state.touched_prim_paths.add(candidate_path)
@@ -183,7 +190,7 @@ class OgnBubblegumPy:
                         state.original_local_transforms.get(state.attached_prim_path),
                     )
                 elif remaining_holders <= 0:
-                    OgnBubblegumPy._reset_rigid_body_after_release(released_prim, state.restore_kinematic_enabled)
+                    OgnBubblegumPy._schedule_pending_release(state, released_prim, state.restore_kinematic_enabled)
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
@@ -211,10 +218,56 @@ class OgnBubblegumPy:
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
         state.restore_kinematic_enabled = None
+        state.pending_release_prim_path = ""
+        state.pending_release_restore_kinematic_enabled = None
+        state.pending_release_deadline = 0.0
         state.touched_prim_paths.clear()
         state.original_local_transforms.clear()
         state.original_xform_states.clear()
         state.original_kinematic_enabled.clear()
+
+    @staticmethod
+    def _schedule_pending_release(state, prim, enabled):
+        if prim is None or not prim.IsValid():
+            return
+
+        import time
+
+        state.pending_release_prim_path = prim.GetPath().pathString
+        state.pending_release_restore_kinematic_enabled = enabled
+        state.pending_release_deadline = time.monotonic() + OgnBubblegumPy.RELEASE_GRACE_S
+
+    @staticmethod
+    def _cancel_pending_release(state, prim_path):
+        if state.pending_release_prim_path != prim_path:
+            return
+        state.pending_release_prim_path = ""
+        state.pending_release_restore_kinematic_enabled = None
+        state.pending_release_deadline = 0.0
+
+    @staticmethod
+    def _update_pending_release(stage, state):
+        if not state.pending_release_prim_path:
+            return
+
+        prim = stage.GetPrimAtPath(state.pending_release_prim_path)
+        if not prim.IsValid():
+            OgnBubblegumPy._cancel_pending_release(state, state.pending_release_prim_path)
+            return
+
+        metadata = OgnBubblegumPy._get_recovery_metadata(prim)
+        active_holders = int(metadata.get("active_holders", 0)) if metadata else 0
+        if active_holders > 0:
+            OgnBubblegumPy._cancel_pending_release(state, state.pending_release_prim_path)
+            return
+
+        import time
+
+        if time.monotonic() < state.pending_release_deadline:
+            return
+
+        OgnBubblegumPy._reset_rigid_body_after_release(prim, state.pending_release_restore_kinematic_enabled)
+        OgnBubblegumPy._cancel_pending_release(state, state.pending_release_prim_path)
 
     @staticmethod
     def _find_candidate_prim(db, stage, helper_prim, candidate_paths, exclude_paths):
