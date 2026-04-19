@@ -30,16 +30,12 @@ class OgnAgvWaypointDriver:
             self.yaw_rate = 0.0
             self.waiting = False
             self.wait_remaining_s = 0.0
-            self.pending_endpoint_action = None
-            self.bend_state = None
             self.route_signature = None
             self.stopped = False
             self.reset_on_play = False
             self.agv_path = ""
             self.path_root_path = ""
             self.returning_from_reverse = False
-            self.dock_returning = False
-            self.dock_exit_idx = 0
             self.active_primitive = None
             self.pending_transition = None
 
@@ -113,7 +109,7 @@ class OgnAgvWaypointDriver:
             state.reset()
             OgnAgvWaypointDriver._snap_agv_to_waypoint(agv_prim, agv_xform, waypoints, state.direction)
             state.idx = min(max(state.direction, 0), len(waypoints) - 1)
-            state.route_signature = route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
+            state.route_signature = (path_root_path, tuple(wp["name"] for wp in waypoints))
             state.reset_on_play = False
             OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
             return True
@@ -174,7 +170,6 @@ class OgnAgvWaypointDriver:
                 OgnAgvWaypointDriver._set_waypoint_outputs(db, state, waypoints)
                 return True
             state.waiting = False
-            state.pending_endpoint_action = None
 
         finished = False
         finished |= OgnAgvWaypointDriver._ensure_active_primitive(
@@ -227,12 +222,7 @@ class OgnAgvWaypointDriver:
             state.active_primitive = transition["primitive"]
             return False
 
-        if transition_type == "advance_index":
-            state.idx += state.direction
-            state.idx = min(max(state.idx, 0), len(waypoints) - 1)
-            return False
-
-        if transition_type == "arc_complete":
+        if transition_type in {"advance_index", "arc_complete"}:
             state.idx += state.direction
             state.idx = min(max(state.idx, 0), len(waypoints) - 1)
             return False
@@ -302,14 +292,8 @@ class OgnAgvWaypointDriver:
                             if reverse_line is not None
                             else reverse_complete
                         )
-                    wait_ms = int(waypoint["wait_ms"])
-                    if wait_ms > 0:
-                        state.waiting = True
-                        state.wait_remaining_s = wait_ms / 1000.0
-                        state.pending_transition = next_transition
-                        return False
-                    return OgnAgvWaypointDriver._apply_transition(
-                        state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
+                    return OgnAgvWaypointDriver._wait_or_apply(
+                        state, waypoint, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
                     )
 
                 reverse_complete = {"type": "stop"}
@@ -326,14 +310,8 @@ class OgnAgvWaypointDriver:
                     if reverse_line is not None
                     else reverse_complete
                 )
-                wait_ms = int(waypoint["wait_ms"])
-                if wait_ms > 0:
-                    state.waiting = True
-                    state.wait_remaining_s = wait_ms / 1000.0
-                    state.pending_transition = next_transition
-                    return False
-                return OgnAgvWaypointDriver._apply_transition(
-                    state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
+                return OgnAgvWaypointDriver._wait_or_apply(
+                    state, waypoint, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
                 )
 
             at_first = idx == 0
@@ -373,6 +351,18 @@ class OgnAgvWaypointDriver:
             )
 
         return False
+
+    @staticmethod
+    def _wait_or_apply(state, waypoint, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol):
+        wait_ms = int(waypoint["wait_ms"])
+        if wait_ms > 0:
+            state.waiting = True
+            state.wait_remaining_s = wait_ms / 1000.0
+            state.pending_transition = next_transition
+            return False
+        return OgnAgvWaypointDriver._apply_transition(
+            state, next_transition, waypoints, pos, yaw, reverse_mode, yaw_tol
+        )
 
     @staticmethod
     def _plan_next_primitive(
