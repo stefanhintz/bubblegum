@@ -29,6 +29,12 @@
                 "description": "Hold true to attach and keep holding the first overlapping prim. Set false to release it.",
                 "default": false
             },
+            "enablePhysicsOnFinalRelease": {
+                "type": "bool",
+                "uiName": "Enable Physics On Final Release",
+                "description": "If true, the final release turns the picked prim into a dynamic rigid body even if it was static before. Handovers do not trigger this.",
+                "default": false
+            },
             "candidatePrimPaths": {
                 "type": "token[]",
                 "uiName": "Candidate Prim Paths",

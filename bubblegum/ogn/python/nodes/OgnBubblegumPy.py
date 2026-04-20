@@ -15,6 +15,7 @@ class OgnBubblegumPy:
             self.attached_prim_path = ""
             self.attached_to_helper = Gf.Matrix4d(1.0)
             self.restore_kinematic_enabled = None
+            self.pending_release_enable_physics = False
             self.pending_release_prim_path = ""
             self.pending_release_restore_kinematic_enabled = None
             self.pending_release_deadline = 0.0
@@ -89,7 +90,12 @@ class OgnBubblegumPy:
                 db.log_error(f"Attached prim no longer exists: {state.attached_prim_path}")
                 return False
             OgnBubblegumPy._snap_attached_prim(helper_prim, attached_prim, state.attached_to_helper)
-            OgnBubblegumPy._clear_attachment_state(stage, state, restore_transform=False)
+            OgnBubblegumPy._clear_attachment_state(
+                stage,
+                state,
+                restore_transform=False,
+                enable_physics_on_final_release=bool(db.inputs.enablePhysicsOnFinalRelease),
+            )
             event_released = True
 
         if state.attached_prim_path:
@@ -178,7 +184,7 @@ class OgnBubblegumPy:
         return [value]
 
     @staticmethod
-    def _clear_attachment_state(stage, state, restore_transform):
+    def _clear_attachment_state(stage, state, restore_transform, enable_physics_on_final_release=False):
         if state.attached_prim_path:
             released_prim = stage.GetPrimAtPath(state.attached_prim_path)
             if released_prim.IsValid():
@@ -190,7 +196,12 @@ class OgnBubblegumPy:
                         state.original_local_transforms.get(state.attached_prim_path),
                     )
                 elif remaining_holders <= 0:
-                    OgnBubblegumPy._schedule_pending_release(state, released_prim, state.restore_kinematic_enabled)
+                    OgnBubblegumPy._schedule_pending_release(
+                        state,
+                        released_prim,
+                        state.restore_kinematic_enabled,
+                        enable_physics_on_final_release,
+                    )
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
@@ -212,12 +223,13 @@ class OgnBubblegumPy:
                 state.original_local_transforms.get(prim_path),
             )
 
-            OgnBubblegumPy._reset_rigid_body_after_release(prim, state.original_kinematic_enabled.get(prim_path))
+            OgnBubblegumPy._restore_original_physics_state(prim, OgnBubblegumPy._get_recovery_metadata(prim))
             OgnBubblegumPy._clear_recovery_metadata(prim)
 
         state.attached_prim_path = ""
         state.attached_to_helper = Gf.Matrix4d(1.0)
         state.restore_kinematic_enabled = None
+        state.pending_release_enable_physics = False
         state.pending_release_prim_path = ""
         state.pending_release_restore_kinematic_enabled = None
         state.pending_release_deadline = 0.0
@@ -227,12 +239,13 @@ class OgnBubblegumPy:
         state.original_kinematic_enabled.clear()
 
     @staticmethod
-    def _schedule_pending_release(state, prim, enabled):
+    def _schedule_pending_release(state, prim, enabled, enable_physics_on_final_release):
         if prim is None or not prim.IsValid():
             return
 
         import time
 
+        state.pending_release_enable_physics = enable_physics_on_final_release
         state.pending_release_prim_path = prim.GetPath().pathString
         state.pending_release_restore_kinematic_enabled = enabled
         state.pending_release_deadline = time.monotonic() + OgnBubblegumPy.RELEASE_GRACE_S
@@ -241,6 +254,7 @@ class OgnBubblegumPy:
     def _cancel_pending_release(state, prim_path):
         if state.pending_release_prim_path != prim_path:
             return
+        state.pending_release_enable_physics = False
         state.pending_release_prim_path = ""
         state.pending_release_restore_kinematic_enabled = None
         state.pending_release_deadline = 0.0
@@ -266,7 +280,10 @@ class OgnBubblegumPy:
         if time.monotonic() < state.pending_release_deadline:
             return
 
-        OgnBubblegumPy._reset_rigid_body_after_release(prim, state.pending_release_restore_kinematic_enabled)
+        if state.pending_release_enable_physics:
+            OgnBubblegumPy._activate_physics_on_release(prim)
+        else:
+            OgnBubblegumPy._reset_rigid_body_after_release(prim, state.pending_release_restore_kinematic_enabled)
         OgnBubblegumPy._cancel_pending_release(state, state.pending_release_prim_path)
 
     @staticmethod
@@ -414,6 +431,43 @@ class OgnBubblegumPy:
 
             if not enabled:
                 OgnBubblegumPy._wake_rigid_body(prim)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _activate_physics_on_release(prim):
+        try:
+            if not prim.HasAPI(UsdPhysics.CollisionAPI):
+                UsdPhysics.CollisionAPI.Apply(prim)
+            if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+                UsdPhysics.RigidBodyAPI.Apply(prim)
+
+            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+            rigid_body_api.GetRigidBodyEnabledAttr().Set(True)
+            rigid_body_api.GetKinematicEnabledAttr().Set(False)
+            OgnBubblegumPy._wake_rigid_body(prim)
+        except Exception:
+            pass
+
+    @staticmethod
+    def _restore_original_physics_state(prim, metadata):
+        if metadata is None:
+            return
+
+        if not prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            if not metadata.get("rigid_body_enabled", False):
+                return
+            try:
+                UsdPhysics.RigidBodyAPI.Apply(prim)
+            except Exception:
+                return
+
+        try:
+            rigid_body_api = UsdPhysics.RigidBodyAPI(prim)
+            if "rigid_body_enabled" in metadata:
+                rigid_body_api.GetRigidBodyEnabledAttr().Set(bool(metadata["rigid_body_enabled"]))
+            if "kinematic_enabled" in metadata:
+                rigid_body_api.GetKinematicEnabledAttr().Set(bool(metadata["kinematic_enabled"]))
         except Exception:
             pass
 
